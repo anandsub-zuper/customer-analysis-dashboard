@@ -1,63 +1,104 @@
 const { google } = require('googleapis');
 const { JWT } = require('google-auth-library');
 
-// Initialize service account with better error handling
-let serviceAccount;
-let jwtClient;
-
-try {
-  // Log environment for debugging
-  console.log("NODE_ENV:", process.env.NODE_ENV);
-  
-  if (process.env.NODE_ENV === 'production') {
-    console.log("Using production service account from environment variable");
+/**
+ * Initialize JWT client for Google Docs API
+ * This function handles different environment configurations
+ */
+const getJwtClient = () => {
+  try {
+    // Log environment for debugging
+    console.log(`Initializing Google Docs Service in ${process.env.NODE_ENV || 'development'} mode`);
     
-    // Check if environment variable exists
-    if (!process.env.GOOGLE_SERVICE_ACCOUNT) {
-      throw new Error("GOOGLE_SERVICE_ACCOUNT environment variable is not set");
-    }
+    let jwtClient;
     
-    try {
-      // Parse the service account JSON
-      serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
-      console.log("Successfully parsed service account JSON");
+    // Production environment
+    if (process.env.NODE_ENV === 'production') {
+      console.log('Using production credentials...');
       
-      // Verify required fields
-      if (!serviceAccount.client_email || !serviceAccount.private_key) {
-        throw new Error("Service account is missing required fields: client_email or private_key");
+      // Option 1: Using base64-encoded service account
+      if (process.env.GOOGLE_SERVICE_ACCOUNT_BASE64) {
+        console.log('Using base64-encoded service account');
+        try {
+          const base64 = process.env.GOOGLE_SERVICE_ACCOUNT_BASE64;
+          const serviceAccountJson = Buffer.from(base64, 'base64').toString();
+          const serviceAccount = JSON.parse(serviceAccountJson);
+          
+          jwtClient = new JWT({
+            email: serviceAccount.client_email,
+            key: serviceAccount.private_key,
+            scopes: ['https://www.googleapis.com/auth/documents.readonly'],
+          });
+          
+          console.log(`Successfully initialized JWT client with email: ${serviceAccount.client_email}`);
+        } catch (base64Error) {
+          throw new Error(`Failed to parse base64-encoded service account: ${base64Error.message}`);
+        }
       }
-    } catch (parseError) {
-      throw new Error(`Failed to parse GOOGLE_SERVICE_ACCOUNT: ${parseError.message}`);
+      // Option 2: Using individual environment variables
+      else if (process.env.SA_CLIENT_EMAIL && process.env.SA_PRIVATE_KEY) {
+        console.log('Using individual service account environment variables');
+        
+        jwtClient = new JWT({
+          email: process.env.SA_CLIENT_EMAIL,
+          key: process.env.SA_PRIVATE_KEY,
+          scopes: ['https://www.googleapis.com/auth/documents.readonly'],
+        });
+        
+        console.log(`Successfully initialized JWT client with email: ${process.env.SA_CLIENT_EMAIL}`);
+      }
+      // Option 3: Using JSON service account
+      else if (process.env.GOOGLE_SERVICE_ACCOUNT) {
+        console.log('Using JSON service account from environment variable');
+        try {
+          const serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+          
+          jwtClient = new JWT({
+            email: serviceAccount.client_email,
+            key: serviceAccount.private_key,
+            scopes: ['https://www.googleapis.com/auth/documents.readonly'],
+          });
+          
+          console.log(`Successfully initialized JWT client with email: ${serviceAccount.client_email}`);
+        } catch (jsonError) {
+          throw new Error(`Failed to parse JSON service account: ${jsonError.message}`);
+        }
+      }
+      // No valid credentials found
+      else {
+        throw new Error('No service account credentials found in environment variables');
+      }
     }
-  } else {
-    console.log("Using local service account file");
-    try {
-      serviceAccount = require('../config/serviceAccount.json');
-      console.log("Successfully loaded service account from file");
-    } catch (fileError) {
-      throw new Error(`Failed to load service account file: ${fileError.message}`);
+    // Development environment - use local file
+    else {
+      console.log('Using local service account file');
+      try {
+        const serviceAccount = require('../config/serviceAccount.json');
+        
+        jwtClient = new JWT({
+          email: serviceAccount.client_email,
+          key: serviceAccount.private_key,
+          scopes: ['https://www.googleapis.com/auth/documents.readonly'],
+        });
+        
+        console.log(`Successfully initialized JWT client with email: ${serviceAccount.client_email}`);
+      } catch (fileError) {
+        throw new Error(`Failed to load local service account file: ${fileError.message}`);
+      }
     }
+    
+    return jwtClient;
+  } catch (error) {
+    console.error('===== ERROR INITIALIZING GOOGLE DOCS SERVICE =====');
+    console.error(error);
+    
+    // Instead of crashing, return null and handle this in the calling code
+    return null;
   }
-  
-  // Log successful initialization of service account (without revealing private key)
-  console.log("Service account email:", serviceAccount.client_email);
-  
-  // Create JWT client
-  jwtClient = new JWT({
-    email: serviceAccount.client_email,
-    key: serviceAccount.private_key,
-    scopes: ['https://www.googleapis.com/auth/documents.readonly'],
-  });
-  
-  console.log("JWT client successfully created");
-} catch (error) {
-  console.error("ERROR INITIALIZING GOOGLE AUTH:", error.message);
-  // Continue execution instead of crashing - you might want to handle this differently
-  // depending on your application needs
-}
+};
 
-// Export the JWT client
-module.exports = jwtClient;
+// Initialize the JWT client
+const jwtClient = getJwtClient();
 
 // Initialize the Drive API
 const drive = google.drive({ version: 'v3', auth: jwtClient });
@@ -105,3 +146,9 @@ exports.listSpreadsheets = async (folderId = null) => {
     throw new Error('Failed to list spreadsheets from Google Drive');
   }
 };
+
+// Export the Google Docs API client for advanced usage
+exports.docs = docs;
+
+// Export the JWT client for reuse with other Google APIs
+exports.jwtClient = jwtClient;
