@@ -1,6 +1,12 @@
 const { google } = require('googleapis');
 const { JWT } = require('google-auth-library');
-const serviceAccount = require('../config/serviceAccount.json');
+let serviceAccount;
+
+if (process.env.NODE_ENV === 'production') {
+  serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+} else {
+  serviceAccount = require('../config/serviceAccount.json');
+}
 
 // Create a JWT client
 const jwtClient = new JWT({
