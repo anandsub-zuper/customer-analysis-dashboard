@@ -3,103 +3,28 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { google } = require('googleapis');
 const { JWT } = require('google-auth-library');
+const { connect, close } = require('./services/mongoDbService');
 
 // Load environment variables
 dotenv.config();
 
-// Initialize JWT client based on environment
-let jwtClient;
-
-// Production environment - use environment variables
-if (process.env.NODE_ENV === 'production') {
-  console.log('Using production credentials...');
-  
-  // Option 1: Using base64-encoded service account
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_BASE64) {
-    console.log('Using base64-encoded service account');
-    try {
-      const base64 = process.env.GOOGLE_SERVICE_ACCOUNT_BASE64;
-      const serviceAccountJson = Buffer.from(base64, 'base64').toString();
-      const serviceAccount = JSON.parse(serviceAccountJson);
-      
-      jwtClient = new JWT({
-        email: serviceAccount.client_email,
-        key: serviceAccount.private_key,
-        scopes: [
-          'https://www.googleapis.com/auth/spreadsheets.readonly',
-          'https://www.googleapis.com/auth/documents.readonly',
-          'https://www.googleapis.com/auth/drive.readonly'
-        ],
-      });
-      
-      console.log(`Successfully initialized JWT client with email: ${serviceAccount.client_email}`);
-    } catch (base64Error) {
-      console.error(`Failed to parse base64-encoded service account: ${base64Error.message}`);
-    }
-  }
-  // Option 2: Using individual environment variables
-  else if (process.env.SA_CLIENT_EMAIL && process.env.SA_PRIVATE_KEY) {
-    console.log('Using individual service account environment variables');
-    
-    jwtClient = new JWT({
-      email: process.env.SA_CLIENT_EMAIL,
-      key: process.env.SA_PRIVATE_KEY,
-      scopes: [
-        'https://www.googleapis.com/auth/spreadsheets.readonly',
-        'https://www.googleapis.com/auth/documents.readonly',
-        'https://www.googleapis.com/auth/drive.readonly'
-      ],
-    });
-    
-    console.log(`Successfully initialized JWT client with email: ${process.env.SA_CLIENT_EMAIL}`);
-  }
-  // Option 3: Using JSON service account
-  else if (process.env.GOOGLE_SERVICE_ACCOUNT) {
-    console.log('Using JSON service account from environment variable');
-    try {
-      const serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
-      
-      jwtClient = new JWT({
-        email: serviceAccount.client_email,
-        key: serviceAccount.private_key,
-        scopes: [
-          'https://www.googleapis.com/auth/spreadsheets.readonly',
-          'https://www.googleapis.com/auth/documents.readonly',
-          'https://www.googleapis.com/auth/drive.readonly'
-        ],
-      });
-      
-      console.log(`Successfully initialized JWT client with email: ${serviceAccount.client_email}`);
-    } catch (jsonError) {
-      console.error(`Failed to parse JSON service account: ${jsonError.message}`);
-    }
-  }
-  // No valid credentials found
-  else {
-    console.error('No service account credentials found in environment variables');
-  }
-} 
-// Development environment - use local file
-else {
-  console.log('Using local service account file');
-  try {
-    const serviceAccount = require('./config/serviceAccount.json');
-    
-    jwtClient = new JWT({
-      email: serviceAccount.client_email,
-      key: serviceAccount.private_key,
-      scopes: [
-        'https://www.googleapis.com/auth/spreadsheets.readonly',
-        'https://www.googleapis.com/auth/documents.readonly',
-        'https://www.googleapis.com/auth/drive.readonly'
-      ],
-    });
-    
-    console.log(`Successfully initialized JWT client with email: ${serviceAccount.client_email}`);
-  } catch (fileError) {
-    console.error(`Failed to load local service account file: ${fileError.message}`);
-  }
+// Google API Setup (keeping your existing Google integration)
+let serviceAccount;
+try {
+  serviceAccount = require('./config/serviceAccount.json');
+} catch (error) {
+  console.log('No local service account file found, using environment variables');
 }
+
+const jwtClient = new JWT({
+  email: serviceAccount?.client_email || process.env.SA_CLIENT_EMAIL,
+  key: serviceAccount?.private_key || process.env.SA_PRIVATE_KEY,
+  scopes: [
+    'https://www.googleapis.com/auth/spreadsheets.readonly',
+    'https://www.googleapis.com/auth/documents.readonly',
+    'https://www.googleapis.com/auth/drive.readonly'
+  ],
+});
 
 // Import routes
 const sheetsRoutes = require('./routes/sheetsRoutes');
@@ -114,17 +39,122 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+// Connect to MongoDB on startup
+async function initializeServer() {
+  try {
+    console.log('Initializing server...');
+    
+    // Connect to MongoDB
+    await connect();
+    console.log('MongoDB connection established');
+    
+    // Start server
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log('Environment:', process.env.NODE_ENV || 'development');
+    });
+    
+  } catch (error) {
+    console.error('Failed to initialize server:', error);
+    process.exit(1);
+  }
+}
+
 // Routes
 app.use('/api/sheets', sheetsRoutes);
 app.use('/api/docs', docsRoutes);
 app.use('/api/analysis', analysisRoutes);
 
-// Root route
-app.get('/', (req, res) => {
-  res.send('Customer Analysis Dashboard API is running');
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    // You can add a simple MongoDB ping here if needed
+    res.json({ 
+      status: 'OK', 
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'ERROR', 
+      message: error.message 
+    });
+  }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Customer Analysis Dashboard API is running',
+    version: '2.0.0',
+    database: 'MongoDB Atlas',
+    timestamp: new Date().toISOString()
+  });
 });
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  });
+});
+
+// Handle 404 routes
+app.use('*', (req, res) => {
+  res.status(404).json({
+    error: 'Route not found',
+    path: req.originalUrl
+  });
+});
+
+// Graceful shutdown handlers
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  try {
+    await close();
+    console.log('MongoDB connection closed');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully');
+  try {
+    await close();
+    console.log('MongoDB connection closed');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', async (error) => {
+  console.error('Uncaught Exception:', error);
+  try {
+    await close();
+  } catch (closeError) {
+    console.error('Error closing MongoDB connection:', closeError);
+  }
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', async (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  try {
+    await close();
+  } catch (closeError) {
+    console.error('Error closing MongoDB connection:', closeError);
+  }
+  process.exit(1);
+});
+
+// Initialize and start the server
+initializeServer();
