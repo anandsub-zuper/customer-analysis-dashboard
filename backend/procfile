@@ -1,1 +1,2 @@
+release: node backend/scripts/initDb.js
 web: node server.js
