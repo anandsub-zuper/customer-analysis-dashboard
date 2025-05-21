@@ -2,13 +2,13 @@ const { google } = require('googleapis');
 const { JWT } = require('google-auth-library');
 
 /**
- * Initialize JWT client for Google Docs API
+ * Initialize JWT client for Google Drive API
  * This function handles different environment configurations
  */
 const getJwtClient = () => {
   try {
     // Log environment for debugging
-    console.log(`Initializing Google Docs Service in ${process.env.NODE_ENV || 'development'} mode`);
+    console.log(`Initializing Google Drive Service in ${process.env.NODE_ENV || 'development'} mode`);
     
     let jwtClient;
     
@@ -27,7 +27,7 @@ const getJwtClient = () => {
           jwtClient = new JWT({
             email: serviceAccount.client_email,
             key: serviceAccount.private_key,
-            scopes: ['https://www.googleapis.com/auth/documents.readonly'],
+            scopes: ['https://www.googleapis.com/auth/drive.readonly'],
           });
           
           console.log(`Successfully initialized JWT client with email: ${serviceAccount.client_email}`);
@@ -42,7 +42,7 @@ const getJwtClient = () => {
         jwtClient = new JWT({
           email: process.env.SA_CLIENT_EMAIL,
           key: process.env.SA_PRIVATE_KEY,
-          scopes: ['https://www.googleapis.com/auth/documents.readonly'],
+          scopes: ['https://www.googleapis.com/auth/drive.readonly'],
         });
         
         console.log(`Successfully initialized JWT client with email: ${process.env.SA_CLIENT_EMAIL}`);
@@ -56,7 +56,7 @@ const getJwtClient = () => {
           jwtClient = new JWT({
             email: serviceAccount.client_email,
             key: serviceAccount.private_key,
-            scopes: ['https://www.googleapis.com/auth/documents.readonly'],
+            scopes: ['https://www.googleapis.com/auth/drive.readonly'],
           });
           
           console.log(`Successfully initialized JWT client with email: ${serviceAccount.client_email}`);
@@ -78,7 +78,7 @@ const getJwtClient = () => {
         jwtClient = new JWT({
           email: serviceAccount.client_email,
           key: serviceAccount.private_key,
-          scopes: ['https://www.googleapis.com/auth/documents.readonly'],
+          scopes: ['https://www.googleapis.com/auth/drive.readonly'],
         });
         
         console.log(`Successfully initialized JWT client with email: ${serviceAccount.client_email}`);
@@ -89,7 +89,7 @@ const getJwtClient = () => {
     
     return jwtClient;
   } catch (error) {
-    console.error('===== ERROR INITIALIZING GOOGLE DOCS SERVICE =====');
+    console.error('===== ERROR INITIALIZING GOOGLE DRIVE SERVICE =====');
     console.error(error);
     
     // Instead of crashing, return null and handle this in the calling code
@@ -101,7 +101,7 @@ const getJwtClient = () => {
 const jwtClient = getJwtClient();
 
 // Initialize the Drive API
-const drive = google.drive({ version: 'v3', auth: jwtClient });
+const drive = jwtClient ? google.drive({ version: 'v3', auth: jwtClient }) : null;
 
 // Function to list Google Docs files
 exports.listDocuments = async (folderId = null) => {
@@ -147,8 +147,8 @@ exports.listSpreadsheets = async (folderId = null) => {
   }
 };
 
-// Export the Google Docs API client for advanced usage
-exports.docs = docs;
+// Export the Google Drive API client for advanced usage
+exports.drive = drive;
 
 // Export the JWT client for reuse with other Google APIs
 exports.jwtClient = jwtClient;
