@@ -147,6 +147,75 @@ exports.listSpreadsheets = async (folderId = null) => {
   }
 };
 
+// Additional methods to add to your googleDriveService.js file
+
+/**
+ * Search for files in a specific folder
+ * @param {string} folderId - Folder ID to search in
+ * @param {string} query - Search query
+ * @returns {Promise<Array>} - Array of matching files
+ */
+exports.searchInFolder = async (folderId, query) => {
+  if (!drive) {
+    throw new Error('Google Drive API client not initialized');
+  }
+  
+  try {
+    console.log(`Searching for "${query}" in folder: ${folderId}`);
+    
+    // Construct the search query for Drive API
+    let driveQuery = '';
+    
+    if (folderId) {
+      driveQuery += `'${folderId}' in parents and `;
+    }
+    
+    // Add fullText search and file type filter (only documents)
+    driveQuery += `(mimeType='application/vnd.google-apps.document') and ` +
+                  `(fullText contains '${query}')`;
+    
+    const response = await drive.files.list({
+      q: driveQuery,
+      fields: 'files(id, name, mimeType, createdTime, modifiedTime, webViewLink)',
+      orderBy: 'modifiedTime desc',
+      pageSize: 20
+    });
+    
+    const files = response.data.files || [];
+    console.log(`Found ${files.length} files matching "${query}"`);
+    
+    return files;
+  } catch (error) {
+    console.error('Error searching in Drive folder:', error);
+    throw new Error(`Failed to search in folder: ${error.message}`);
+  }
+};
+
+/**
+ * Get metadata for a specific file
+ * @param {string} fileId - File ID
+ * @returns {Promise<Object>} - File metadata
+ */
+exports.getFileMetadata = async (fileId) => {
+  if (!drive) {
+    throw new Error('Google Drive API client not initialized');
+  }
+  
+  try {
+    console.log(`Getting metadata for file: ${fileId}`);
+    
+    const response = await drive.files.get({
+      fileId: fileId,
+      fields: 'id, name, mimeType, createdTime, modifiedTime, parents, webViewLink'
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error getting file metadata:', error);
+    throw new Error(`Failed to get file metadata: ${error.message}`);
+  }
+};
+
 // Export the Google Drive API client for advanced usage
 exports.drive = drive;
 
