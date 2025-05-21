@@ -13,4 +13,21 @@ router.get('/list', auth, docsController.listDocs);
 // @access  Private
 router.get('/:id', auth, docsController.getDocContent);
 
+// --- New Routes for RAG Implementation ---
+
+// @route   GET api/docs/analysis-folder
+// @desc    List documents from the analysis folder
+// @access  Private
+router.get('/analysis-folder', auth, docsController.listAnalysisDocuments);
+
+// @route   POST api/docs/extract
+// @desc    Extract structured customer data from a document
+// @access  Private
+router.post('/extract', auth, docsController.extractCustomerData);
+
+// @route   GET api/docs/search
+// @desc    Search documents with specific keywords
+// @access  Private
+router.get('/search', auth, docsController.searchDocuments);
+
 module.exports = router;
