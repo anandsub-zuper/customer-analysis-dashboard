@@ -6,132 +6,7 @@ const sheetsService = require('./googleSheetsService');
 const docsService = require('./googleDocsService');
 const driveService = require('./googleDriveService');
 
-/**
- * Main service for retrieving historical customer data from all sources
- */
-const historicalDataService = {
-  /**
-   * Aggregates historical customer data from all configured sources
-   * @returns {Promise<Array>} - Aggregated historical data
-   */
-  getHistoricalData: async () => {
-    try {
-      console.log('Retrieving historical customer data from multiple sources...');
-      
-      // Initialize an array to store all historical data
-      let allHistoricalData = [];
-      
-      // 1. Get data from Google Sheets (if configured)
-      const sheetsData = await retrieveFromSheets();
-      if (sheetsData && sheetsData.length > 0) {
-        console.log(`Retrieved ${sheetsData.length - 1} customer records from Sheets`);
-        allHistoricalData = allHistoricalData.concat(normalizeSheetData(sheetsData));
-      }
-      
-      // 2. Get data from Google Forms responses (if configured)
-      const formsData = await retrieveFromForms();
-      if (formsData && formsData.length > 0) {
-        console.log(`Retrieved ${formsData.length} customer records from Forms`);
-        allHistoricalData = allHistoricalData.concat(formsData);
-      }
-      
-      // 3. Get data from Google Docs (analysis documents)
-      const docsData = await retrieveFromDocs();
-      if (docsData && docsData.length > 0) {
-        console.log(`Retrieved ${docsData.length} customer records from Docs`);
-        allHistoricalData = allHistoricalData.concat(docsData);
-      }
-      
-      // If we didn't get any data, return empty result
-      if (allHistoricalData.length === 0) {
-        console.warn('No historical data found in any configured sources.');
-        return [];
-      }
-      
-      // Return the aggregated data
-      return allHistoricalData;
-    } catch (error) {
-      console.error('Error retrieving historical data:', error);
-      return [];
-    }
-  },
-  
-  /**
-   * Formats historical data for inclusion in the OpenAI prompt
-   * @param {Array} historicalData - Aggregated historical data
-   * @returns {string} - Formatted historical data as string
-   */
-// Enhanced formatHistoricalDataForPrompt using ALL columns
-
-formatHistoricalDataForPrompt: (historicalData) => {
-  if (!historicalData || historicalData.length === 0) {
-    return "No historical data available.";
-  }
-  
-  // Create detailed customer profiles using ALL data
-  const customerSummaries = historicalData.map(customer => {
-    let summary = `
-=== CUSTOMER PROFILE ===
-Name: ${customer.customerName}
-Industry: ${customer.industry}
-Submitted: ${customer.timestamp ? new Date(customer.timestamp).toLocaleDateString() : 'Unknown'}
-
-BUSINESS METRICS:
-- ARR: $${customer.businessMetrics?.arr?.toLocaleString() || 'Unknown'}
-- Implementation: ${customer.businessMetrics?.daysToOnboard || 'Unknown'} days
-- Status: ${customer.businessMetrics?.currentStatus || 'Unknown'}
-- Health: ${customer.businessMetrics?.health || 'Unknown'}
-- Retention Risk: ${customer.businessMetrics?.retentionRisk || 'None identified'}
-- Pending Payments: ${customer.businessMetrics?.pendingPayments ? 'YES' : 'No'}
-
-ORGANIZATION:
-- Total Users: ${customer.userCount?.total || 0}
-- Field Staff: ${customer.userCount?.field || 0}
-- Back Office: ${customer.userCount?.backOffice || 0}
-- Launch Timeline: ${customer.launchDate || 'Not specified'}
-
-CURRENT STATE:
-- Existing System: ${customer.currentSystems?.name || 'None'}
-- Replacement Reason: ${customer.currentSystems?.replacementReasons || 'N/A'}
-
-SERVICES & OPERATIONS:
-- Services Offered: ${customer.services?.join(', ') || 'Not specified'}
-- Additional Services: ${customer.servicesDetails || 'None'}
-- Workflow Complexity: ${customer.workflowDescription ? 'Detailed (' + customer.workflowDescription.length + ' chars)' : 'Not provided'}
-
-REQUIREMENTS PROFILE:
-- Integrations Needed: ${customer.requirements?.integrations?.join(', ') || 'None'}
-- Integration Complexity: ${customer.requirements?.integrationScope ? 'Custom scope required' : 'Standard'}
-- Checklists/Inspections: ${customer.requirements?.checklists?.needed ? 'YES - ' + (customer.requirements.checklists.details || 'Custom needed') : 'No'}
-- Customer Notifications: ${customer.requirements?.notifications?.customer?.needed ? 'YES via ' + customer.requirements.notifications.customer.methods.join(', ') : 'No'}
-- Back Office Alerts: ${customer.requirements?.notifications?.backOffice?.needed ? 'YES' : 'No'}
-- Service Reports: ${customer.requirements?.serviceReports?.needed ? 'YES' : 'No'}
-- Quotations: ${customer.requirements?.quotations?.needed ? 'YES' : 'No'}
-- Invoicing: ${customer.requirements?.invoicing?.needed ? 'YES' : 'No'}
-- Payment Collection: ${customer.requirements?.paymentCollection?.needed ? 'YES' : 'No'}
-
-SCORES:
-- Overall Fit: ${customer.fitScore}%
-- Data Completeness: ${customer.completenessScore}%`;
-    
-    return summary;
-  }).join('\n\n---\n\n');
-  
-  // Advanced analytics using all data points
-  const analytics = generateComprehensiveAnalytics(historicalData);
-  
-  return `
-COMPREHENSIVE HISTORICAL ANALYSIS
-=================================
-
-${analytics}
-
-DETAILED CUSTOMER PROFILES:
-${customerSummaries}
-`;
-}
-
-// Generate comprehensive analytics from all data points
+// Helper function - Generate comprehensive analytics from all data points
 function generateComprehensiveAnalytics(historicalData) {
   const total = historicalData.length;
   
@@ -227,6 +102,129 @@ KEY INSIGHTS:
 4. Payment Feature: ${Math.round(featureAdoption.payments/total*100)}% adoption suggests ${featureAdoption.payments/total > 0.3 ? 'strong' : 'growth'} opportunity
 `;
 }
+
+/**
+ * Main service for retrieving historical customer data from all sources
+ */
+const historicalDataService = {
+  /**
+   * Aggregates historical customer data from all configured sources
+   * @returns {Promise<Array>} - Aggregated historical data
+   */
+  getHistoricalData: async () => {
+    try {
+      console.log('Retrieving historical customer data from multiple sources...');
+      
+      // Initialize an array to store all historical data
+      let allHistoricalData = [];
+      
+      // 1. Get data from Google Sheets (if configured)
+      const sheetsData = await retrieveFromSheets();
+      if (sheetsData && sheetsData.length > 0) {
+        console.log(`Retrieved ${sheetsData.length - 1} customer records from Sheets`);
+        allHistoricalData = allHistoricalData.concat(normalizeSheetData(sheetsData));
+      }
+      
+      // 2. Get data from Google Forms responses (if configured)
+      const formsData = await retrieveFromForms();
+      if (formsData && formsData.length > 0) {
+        console.log(`Retrieved ${formsData.length} customer records from Forms`);
+        allHistoricalData = allHistoricalData.concat(formsData);
+      }
+      
+      // 3. Get data from Google Docs (analysis documents)
+      const docsData = await retrieveFromDocs();
+      if (docsData && docsData.length > 0) {
+        console.log(`Retrieved ${docsData.length} customer records from Docs`);
+        allHistoricalData = allHistoricalData.concat(docsData);
+      }
+      
+      // If we didn't get any data, return empty result
+      if (allHistoricalData.length === 0) {
+        console.warn('No historical data found in any configured sources.');
+        return [];
+      }
+      
+      // Return the aggregated data
+      return allHistoricalData;
+    } catch (error) {
+      console.error('Error retrieving historical data:', error);
+      return [];
+    }
+  },
+  
+  /**
+   * Formats historical data for inclusion in the OpenAI prompt
+   * @param {Array} historicalData - Aggregated historical data
+   * @returns {string} - Formatted historical data as string
+   */
+  formatHistoricalDataForPrompt: (historicalData) => {
+    if (!historicalData || historicalData.length === 0) {
+      return "No historical data available.";
+    }
+    
+    // Create detailed customer profiles using ALL data
+    const customerSummaries = historicalData.map(customer => {
+      let summary = `
+=== CUSTOMER PROFILE ===
+Name: ${customer.customerName}
+Industry: ${customer.industry}
+Submitted: ${customer.timestamp ? new Date(customer.timestamp).toLocaleDateString() : 'Unknown'}
+
+BUSINESS METRICS:
+- ARR: $${customer.businessMetrics?.arr?.toLocaleString() || 'Unknown'}
+- Implementation: ${customer.businessMetrics?.daysToOnboard || 'Unknown'} days
+- Status: ${customer.businessMetrics?.currentStatus || 'Unknown'}
+- Health: ${customer.businessMetrics?.health || 'Unknown'}
+- Retention Risk: ${customer.businessMetrics?.retentionRisk || 'None identified'}
+- Pending Payments: ${customer.businessMetrics?.pendingPayments ? 'YES' : 'No'}
+
+ORGANIZATION:
+- Total Users: ${customer.userCount?.total || 0}
+- Field Staff: ${customer.userCount?.field || 0}
+- Back Office: ${customer.userCount?.backOffice || 0}
+- Launch Timeline: ${customer.launchDate || 'Not specified'}
+
+CURRENT STATE:
+- Existing System: ${customer.currentSystems?.name || 'None'}
+- Replacement Reason: ${customer.currentSystems?.replacementReasons || 'N/A'}
+
+SERVICES & OPERATIONS:
+- Services Offered: ${customer.services?.join(', ') || 'Not specified'}
+- Additional Services: ${customer.servicesDetails || 'None'}
+- Workflow Complexity: ${customer.workflowDescription ? 'Detailed (' + customer.workflowDescription.length + ' chars)' : 'Not provided'}
+
+REQUIREMENTS PROFILE:
+- Integrations Needed: ${customer.requirements?.integrations?.join(', ') || 'None'}
+- Integration Complexity: ${customer.requirements?.integrationScope ? 'Custom scope required' : 'Standard'}
+- Checklists/Inspections: ${customer.requirements?.checklists?.needed ? 'YES - ' + (customer.requirements.checklists.details || 'Custom needed') : 'No'}
+- Customer Notifications: ${customer.requirements?.notifications?.customer?.needed ? 'YES via ' + customer.requirements.notifications.customer.methods.join(', ') : 'No'}
+- Back Office Alerts: ${customer.requirements?.notifications?.backOffice?.needed ? 'YES' : 'No'}
+- Service Reports: ${customer.requirements?.serviceReports?.needed ? 'YES' : 'No'}
+- Quotations: ${customer.requirements?.quotations?.needed ? 'YES' : 'No'}
+- Invoicing: ${customer.requirements?.invoicing?.needed ? 'YES' : 'No'}
+- Payment Collection: ${customer.requirements?.paymentCollection?.needed ? 'YES' : 'No'}
+
+SCORES:
+- Overall Fit: ${customer.fitScore}%
+- Data Completeness: ${customer.completenessScore}%`;
+      
+      return summary;
+    }).join('\n\n---\n\n');
+    
+    // Advanced analytics using all data points
+    const analytics = generateComprehensiveAnalytics(historicalData);
+    
+    return `
+COMPREHENSIVE HISTORICAL ANALYSIS
+=================================
+
+${analytics}
+
+DETAILED CUSTOMER PROFILES:
+${customerSummaries}
+`;
+  }
 };
 
 /**
@@ -351,8 +349,6 @@ async function retrieveFromDocs() {
  * @param {Array} sheetData - Raw sheet data
  * @returns {Array} - Array of normalized customer objects
  */
-// Complete normalizeSheetData function for ALL columns in backend/services/historicalDataService.js
-
 function normalizeSheetData(sheetData) {
   // Extract headers from the first row
   const headers = sheetData[0].map(header => header ? header.trim() : '');
