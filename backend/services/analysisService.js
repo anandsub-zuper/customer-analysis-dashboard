@@ -19,6 +19,9 @@ exports.saveAnalysisResults = async (analysisData) => {
       fitScore: analysisData.fitScore,
       userCount: analysisData.userCount || {},
       requirements: analysisData.requirements || {},
+      services: analysisData.services || [],
+      currentSystems: analysisData.currentSystems || [],
+      timeline: analysisData.timeline || '',
       results: {
         summary: analysisData.summary || '',
         strengths: analysisData.strengths || [],
@@ -94,6 +97,29 @@ exports.listRecentAnalyses = async (limit = 10) => {
     }));
   } catch (error) {
     console.error('Error listing analyses:', error);
+    throw error;
+  }
+};
+
+// Delete analysis by ID
+exports.deleteAnalysis = async (id) => {
+  try {
+    const db = await getDb();
+    const collection = db.collection('analyses');
+    
+    // Convert string ID to ObjectId
+    const objectId = new ObjectId(id);
+    
+    // Delete the document
+    const result = await collection.deleteOne({ _id: objectId });
+    
+    if (result.deletedCount === 0) {
+      throw new Error('Analysis not found');
+    }
+    
+    return { success: true, message: 'Analysis deleted successfully' };
+  } catch (error) {
+    console.error('Error deleting analysis:', error);
     throw error;
   }
 };
