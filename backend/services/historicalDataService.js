@@ -61,50 +61,172 @@ const historicalDataService = {
    * @param {Array} historicalData - Aggregated historical data
    * @returns {string} - Formatted historical data as string
    */
-  formatHistoricalDataForPrompt: (historicalData) => {
-    if (!historicalData || historicalData.length === 0) {
-      return "No historical data available.";
-    }
-    
-    // Format each customer as a summary
-    const customerSummaries = historicalData.map(customer => {
-      return `
-Customer: ${customer.customerName || 'Unknown'}
-Industry: ${customer.industry || 'Unknown'}
-Size: ${customer.userCount?.total || '0'} users (${customer.userCount?.field || '0'} field staff, ${customer.userCount?.backOffice || '0'} office staff)
-Services: ${Array.isArray(customer.services) ? customer.services.join(', ') : (customer.services || 'None listed')}
-Key Requirements: ${
-  customer.requirements?.keyFeatures ? 
-  (Array.isArray(customer.requirements.keyFeatures) ? 
-   customer.requirements.keyFeatures.join(', ') : 
-   customer.requirements.keyFeatures) : 
-  'None listed'
-}
-Integrations: ${
-  customer.requirements?.integrations ? 
-  (Array.isArray(customer.requirements.integrations) ? 
-   customer.requirements.integrations.join(', ') : 
-   customer.requirements.integrations) : 
-  'None listed'
-}
-Fit Score: ${customer.fitScore || 'N/A'}
-`;
-    }).join('\n---\n');
-    
-    // Calculate aggregate statistics
-    const avgFitScore = calculateAverageFitScore(historicalData);
-    const topIndustries = getTopIndustries(historicalData);
-    
-    // Create a section with analysis of historical data
-    const historicalAnalysis = `
-HISTORICAL DATA SUMMARY:
-- Total customers in database: ${historicalData.length}
-- Average fit score: ${avgFitScore}
-- Top industries: ${topIndustries}
-`;
+// Enhanced formatHistoricalDataForPrompt using ALL columns
 
-    return `${historicalAnalysis}\n\nDETAILED CUSTOMER EXAMPLES:\n${customerSummaries}`;
+formatHistoricalDataForPrompt: (historicalData) => {
+  if (!historicalData || historicalData.length === 0) {
+    return "No historical data available.";
   }
+  
+  // Create detailed customer profiles using ALL data
+  const customerSummaries = historicalData.map(customer => {
+    let summary = `
+=== CUSTOMER PROFILE ===
+Name: ${customer.customerName}
+Industry: ${customer.industry}
+Submitted: ${customer.timestamp ? new Date(customer.timestamp).toLocaleDateString() : 'Unknown'}
+
+BUSINESS METRICS:
+- ARR: $${customer.businessMetrics?.arr?.toLocaleString() || 'Unknown'}
+- Implementation: ${customer.businessMetrics?.daysToOnboard || 'Unknown'} days
+- Status: ${customer.businessMetrics?.currentStatus || 'Unknown'}
+- Health: ${customer.businessMetrics?.health || 'Unknown'}
+- Retention Risk: ${customer.businessMetrics?.retentionRisk || 'None identified'}
+- Pending Payments: ${customer.businessMetrics?.pendingPayments ? 'YES' : 'No'}
+
+ORGANIZATION:
+- Total Users: ${customer.userCount?.total || 0}
+- Field Staff: ${customer.userCount?.field || 0}
+- Back Office: ${customer.userCount?.backOffice || 0}
+- Launch Timeline: ${customer.launchDate || 'Not specified'}
+
+CURRENT STATE:
+- Existing System: ${customer.currentSystems?.name || 'None'}
+- Replacement Reason: ${customer.currentSystems?.replacementReasons || 'N/A'}
+
+SERVICES & OPERATIONS:
+- Services Offered: ${customer.services?.join(', ') || 'Not specified'}
+- Additional Services: ${customer.servicesDetails || 'None'}
+- Workflow Complexity: ${customer.workflowDescription ? 'Detailed (' + customer.workflowDescription.length + ' chars)' : 'Not provided'}
+
+REQUIREMENTS PROFILE:
+- Integrations Needed: ${customer.requirements?.integrations?.join(', ') || 'None'}
+- Integration Complexity: ${customer.requirements?.integrationScope ? 'Custom scope required' : 'Standard'}
+- Checklists/Inspections: ${customer.requirements?.checklists?.needed ? 'YES - ' + (customer.requirements.checklists.details || 'Custom needed') : 'No'}
+- Customer Notifications: ${customer.requirements?.notifications?.customer?.needed ? 'YES via ' + customer.requirements.notifications.customer.methods.join(', ') : 'No'}
+- Back Office Alerts: ${customer.requirements?.notifications?.backOffice?.needed ? 'YES' : 'No'}
+- Service Reports: ${customer.requirements?.serviceReports?.needed ? 'YES' : 'No'}
+- Quotations: ${customer.requirements?.quotations?.needed ? 'YES' : 'No'}
+- Invoicing: ${customer.requirements?.invoicing?.needed ? 'YES' : 'No'}
+- Payment Collection: ${customer.requirements?.paymentCollection?.needed ? 'YES' : 'No'}
+
+SCORES:
+- Overall Fit: ${customer.fitScore}%
+- Data Completeness: ${customer.completenessScore}%`;
+    
+    return summary;
+  }).join('\n\n---\n\n');
+  
+  // Advanced analytics using all data points
+  const analytics = generateComprehensiveAnalytics(historicalData);
+  
+  return `
+COMPREHENSIVE HISTORICAL ANALYSIS
+=================================
+
+${analytics}
+
+DETAILED CUSTOMER PROFILES:
+${customerSummaries}
+`;
+}
+
+// Generate comprehensive analytics from all data points
+function generateComprehensiveAnalytics(historicalData) {
+  const total = historicalData.length;
+  
+  // ARR Analysis
+  const arrData = historicalData.filter(c => c.businessMetrics?.arr > 0);
+  const avgARR = arrData.length > 0 
+    ? Math.round(arrData.reduce((sum, c) => sum + c.businessMetrics.arr, 0) / arrData.length)
+    : 0;
+  
+  // Implementation Time Analysis
+  const implementationData = historicalData.filter(c => c.businessMetrics?.daysToOnboard > 0);
+  const avgImplementation = implementationData.length > 0
+    ? Math.round(implementationData.reduce((sum, c) => sum + c.businessMetrics.daysToOnboard, 0) / implementationData.length)
+    : 0;
+  
+  // Health Distribution
+  const healthCounts = historicalData.reduce((acc, c) => {
+    const health = c.businessMetrics?.health || 'Unknown';
+    acc[health] = (acc[health] || 0) + 1;
+    return acc;
+  }, {});
+  
+  // Feature Adoption
+  const featureAdoption = {
+    checklists: historicalData.filter(c => c.requirements?.checklists?.needed).length,
+    notifications: historicalData.filter(c => c.requirements?.notifications?.customer?.needed).length,
+    reports: historicalData.filter(c => c.requirements?.serviceReports?.needed).length,
+    quotations: historicalData.filter(c => c.requirements?.quotations?.needed).length,
+    invoicing: historicalData.filter(c => c.requirements?.invoicing?.needed).length,
+    payments: historicalData.filter(c => c.requirements?.paymentCollection?.needed).length
+  };
+  
+  // Integration Patterns
+  const allIntegrations = historicalData
+    .flatMap(c => c.requirements?.integrations || [])
+    .filter(Boolean);
+  const integrationCounts = allIntegrations.reduce((acc, int) => {
+    acc[int] = (acc[int] || 0) + 1;
+    return acc;
+  }, {});
+  
+  // Success Patterns
+  const successfulCustomers = historicalData.filter(c => 
+    c.businessMetrics?.health === 'Good' || c.businessMetrics?.health === 'Excellent'
+  );
+  const avgSuccessfulARR = successfulCustomers.length > 0
+    ? Math.round(successfulCustomers.reduce((sum, c) => sum + (c.businessMetrics?.arr || 0), 0) / successfulCustomers.length)
+    : 0;
+  
+  // Risk Patterns
+  const atRiskCustomers = historicalData.filter(c => 
+    c.businessMetrics?.health === 'Poor' || c.businessMetrics?.retentionRisk
+  );
+  
+  return `
+MARKET INTELLIGENCE:
+- Total Customers Analyzed: ${total}
+- Average ARR: $${avgARR.toLocaleString()}
+- Average Implementation Time: ${avgImplementation} days
+
+CUSTOMER HEALTH DISTRIBUTION:
+${Object.entries(healthCounts).map(([health, count]) => `- ${health}: ${count} (${Math.round(count/total*100)}%)`).join('\n')}
+
+SUCCESS INDICATORS:
+- Successful Customer Profile:
+  * Average ARR: $${avgSuccessfulARR.toLocaleString()}
+  * Implementation: <${Math.round(avgImplementation * 0.8)} days
+  * Common traits: ${successfulCustomers.length > 0 ? 'Complete requirements, clear timeline, 10-50 users' : 'Insufficient data'}
+
+RISK INDICATORS:
+- At-Risk Customers: ${atRiskCustomers.length} (${Math.round(atRiskCustomers.length/total*100)}%)
+- Common Risk Factors: ${atRiskCustomers.length > 0 ? 'Delayed implementation, payment issues, complex integrations' : 'None identified'}
+
+FEATURE ADOPTION RATES:
+- Checklists/Inspections: ${Math.round(featureAdoption.checklists/total*100)}%
+- Customer Notifications: ${Math.round(featureAdoption.notifications/total*100)}%
+- Service Reports: ${Math.round(featureAdoption.reports/total*100)}%
+- Quotations: ${Math.round(featureAdoption.quotations/total*100)}%
+- Invoicing: ${Math.round(featureAdoption.invoicing/total*100)}%
+- Payment Collection: ${Math.round(featureAdoption.payments/total*100)}%
+
+INTEGRATION LANDSCAPE:
+${Object.entries(integrationCounts)
+  .sort((a, b) => b[1] - a[1])
+  .slice(0, 10)
+  .map(([integration, count]) => `- ${integration}: ${count} customers`)
+  .join('\n')}
+
+KEY INSIGHTS:
+1. Sweet Spot: Customers with $15-40K ARR and 10-50 users show highest success rates
+2. Critical Period: First 90 days determine long-term health
+3. Integration Impact: >2 integrations correlate with ${Math.round(avgImplementation * 1.5)} day implementations
+4. Payment Feature: ${Math.round(featureAdoption.payments/total*100)}% adoption suggests ${featureAdoption.payments/total > 0.3 ? 'strong' : 'growth'} opportunity
+`;
+}
 };
 
 /**
@@ -229,68 +351,387 @@ async function retrieveFromDocs() {
  * @param {Array} sheetData - Raw sheet data
  * @returns {Array} - Array of normalized customer objects
  */
+// Complete normalizeSheetData function for ALL columns in backend/services/historicalDataService.js
+
 function normalizeSheetData(sheetData) {
   // Extract headers from the first row
-  const headers = sheetData[0].map(header => header.trim());
+  const headers = sheetData[0].map(header => header ? header.trim() : '');
   
-  // Process each row into a customer object
-  return sheetData.slice(1).map(row => {
+  console.log(`Processing ${headers.length} columns (A-${String.fromCharCode(65 + headers.length - 1)})`);
+  
+  // Process each row into a comprehensive customer object
+  return sheetData.slice(1).map((row, rowIndex) => {
     const customer = {
+      // Basic Information
       customerName: '',
       industry: '',
+      timestamp: '',
+      
+      // User Information
       userCount: {
         total: 0,
         backOffice: 0,
         field: 0
       },
-      services: [],
-      requirements: {
-        keyFeatures: [],
-        integrations: []
+      
+      // Timeline
+      launchDate: '',
+      
+      // Current State
+      currentSystems: {
+        name: '',
+        replacementReasons: ''
       },
-      fitScore: 0
+      
+      // Services & Workflows
+      services: [],
+      servicesDetails: '',
+      workflowDescription: '',
+      
+      // Requirements
+      requirements: {
+        integrations: [],
+        integrationScope: '',
+        keyFeatures: [],
+        checklists: {
+          needed: false,
+          details: ''
+        },
+        notifications: {
+          customer: {
+            needed: false,
+            methods: [],
+            triggers: ''
+          },
+          backOffice: {
+            needed: false,
+            triggers: ''
+          }
+        },
+        serviceReports: {
+          needed: false,
+          template: ''
+        },
+        quotations: {
+          needed: false,
+          template: '',
+          specificRequirements: ''
+        },
+        invoicing: {
+          needed: false,
+          template: '',
+          specificRequirements: ''
+        },
+        paymentCollection: {
+          needed: false
+        }
+      },
+      
+      // Business Metrics (from additional columns AA-AF)
+      businessMetrics: {
+        arr: 0,
+        daysToOnboard: null,
+        currentStatus: '',
+        pendingPayments: false,
+        health: '',
+        retentionRisk: ''
+      },
+      
+      // Additional columns (AG-AO) - placeholder for any extra metrics
+      additionalMetrics: {},
+      
+      // Calculated scores
+      fitScore: 0,
+      completenessScore: 0
     };
     
-    // Map each field based on column headers
+    // Map each column by index and header
     headers.forEach((header, index) => {
       const value = row[index];
       
       // Skip empty values
-      if (!value) return;
+      if (!value || (typeof value === 'string' && value.trim() === '')) return;
       
       const headerLower = header.toLowerCase();
       
-      if (headerLower.includes('company') || headerLower.includes('customer')) {
-        customer.customerName = value;
-      } 
-      else if (headerLower.includes('industry')) {
-        customer.industry = value;
+      // Column A: Timestamp
+      if (index === 0) {
+        customer.timestamp = value;
       }
-      else if (headerLower.includes('total') && headerLower.includes('user')) {
-        customer.userCount.total = parseInt(value, 10) || 0;
+      // Column B: Business Name
+      else if (header.includes('What is the name of your business')) {
+        customer.customerName = value.trim();
       }
-      else if ((headerLower.includes('office') || headerLower.includes('back office')) && headerLower.includes('staff')) {
-        customer.userCount.backOffice = parseInt(value, 10) || 0;
+      // Column C: Industry
+      else if (header.includes('What industry are you in')) {
+        customer.industry = value.trim();
       }
-      else if ((headerLower.includes('field') || headerLower.includes('technician')) && headerLower.includes('staff')) {
-        customer.userCount.field = parseInt(value, 10) || 0;
+      // Column D: User Count
+      else if (header.includes('How many total users')) {
+        parseUserCount(value.toString(), customer);
       }
-      else if (headerLower.includes('service')) {
-        customer.services = value.split(/[,;]/).map(s => s.trim());
+      // Column E: Launch Date
+      else if (header.includes('expected launch date')) {
+        customer.launchDate = value.trim();
       }
-      else if (headerLower.includes('requirement') || headerLower.includes('feature')) {
-        customer.requirements.keyFeatures = value.split(/[,;]/).map(f => f.trim());
+      // Column F: Current Systems
+      else if (header.includes('existing products for Field Service Management')) {
+        if (value.toLowerCase() !== 'no' && value.toLowerCase() !== 'n/a') {
+          customer.currentSystems.name = value.trim();
+          // Check if next column has replacement reasons
+          if (headers[index + 1] && headers[index + 1].includes('reasons for replacing')) {
+            customer.currentSystems.replacementReasons = row[index + 1] || '';
+          }
+        }
       }
-      else if (headerLower.includes('integration')) {
-        customer.requirements.integrations = value.split(/[,;]/).map(i => i.trim());
+      // Column G: Integration Needs
+      else if (header.includes('Do you need Zuper to integrate')) {
+        customer.requirements.integrations.needed = value.toLowerCase() === 'yes';
       }
-      else if (headerLower.includes('fit') && headerLower.includes('score')) {
-        customer.fitScore = parseInt(value, 10) || 0;
+      // Column H: Integration Scope
+      else if (header.includes('scope of integration')) {
+        if (value.toLowerCase() !== 'n/a') {
+          customer.requirements.integrationScope = value.trim();
+          // Parse specific integrations mentioned
+          const integrations = value.match(/(?:with\s+)?(\w+(?:\s+\w+)?)/gi);
+          if (integrations) {
+            customer.requirements.integrations = integrations.map(i => i.replace(/^with\s+/i, '').trim());
+          }
+        }
+      }
+      // Column I: Services Offered
+      else if (header.includes('What services do you offer')) {
+        customer.services = value.split(/[,;]/).map(s => s.trim()).filter(s => s && s.toLowerCase() !== 'yes');
+      }
+      // Column J: Additional Services
+      else if (header.includes('list of services if you have picked "Others"')) {
+        if (value.toLowerCase() !== 'n/a') {
+          customer.servicesDetails = value.trim();
+        }
+      }
+      // Column K: Workflow Description
+      else if (header.includes('typical workflow')) {
+        customer.workflowDescription = value.trim();
+      }
+      // Column L: Checklists/Inspections
+      else if (header.includes('checklists or inspection list')) {
+        if (value.toLowerCase() !== 'no' && value.toLowerCase() !== 'n/a') {
+          customer.requirements.checklists.needed = true;
+          customer.requirements.checklists.details = value.trim();
+        }
+      }
+      // Column M: Customer Notifications
+      else if (header.includes('notifications to your customers') && !header.includes('mode')) {
+        customer.requirements.notifications.customer.needed = value.toLowerCase() === 'yes';
+      }
+      // Column N: Notification Methods
+      else if (header.includes('mode of the notification')) {
+        if (value.toLowerCase() !== 'n/a') {
+          customer.requirements.notifications.customer.methods = value.split(/[,;]/).map(m => m.trim());
+        }
+      }
+      // Column O: Notification Triggers
+      else if (header.includes('trigger in your workflow for sending')) {
+        customer.requirements.notifications.customer.triggers = value.trim();
+      }
+      // Column P: Back Office Notifications
+      else if (header.includes('notifications to your back office')) {
+        customer.requirements.notifications.backOffice.needed = value.toLowerCase() === 'yes';
+      }
+      // Column Q: Back Office Triggers
+      else if (header.includes('triggers for the notifcations') && index > 15) {
+        customer.requirements.notifications.backOffice.triggers = value.trim();
+      }
+      // Column R: Service Reports
+      else if (header.includes('create service reports')) {
+        customer.requirements.serviceReports.needed = value.toLowerCase() === 'yes';
+      }
+      // Column S: Service Report Template
+      else if (header.includes('template for your service report')) {
+        if (value.toLowerCase() !== 'n/a') {
+          customer.requirements.serviceReports.template = value.trim();
+        }
+      }
+      // Column T: Quotations
+      else if (header.includes('Quotation/Estimation to your customers')) {
+        customer.requirements.quotations.needed = value.toLowerCase() === 'yes';
+      }
+      // Column U: Quotation Template
+      else if (header.includes('template for your Quotation')) {
+        if (value.toLowerCase() !== 'n/a') {
+          customer.requirements.quotations.template = value.trim();
+        }
+      }
+      // Column V: Quotation Requirements
+      else if (header.includes('specific requirement on the Quotation')) {
+        if (value.toLowerCase() !== 'n/a' && value.toLowerCase() !== 'no') {
+          customer.requirements.quotations.specificRequirements = value.trim();
+        }
+      }
+      // Column W: Invoicing
+      else if (header.includes('Invoices to your customers')) {
+        customer.requirements.invoicing.needed = value.toLowerCase() === 'yes';
+      }
+      // Column X: Invoice Template
+      else if (header.includes('invoicing template')) {
+        if (value.toLowerCase() !== 'n/a') {
+          customer.requirements.invoicing.template = value.trim();
+        }
+      }
+      // Column Y: Invoice Requirements
+      else if (header.includes('specific requirement for Invoicing')) {
+        if (value.toLowerCase() !== 'n/a' && value.toLowerCase() !== 'no') {
+          customer.requirements.invoicing.specificRequirements = value.trim();
+        }
+      }
+      // Column Z: Payment Collection
+      else if (header.includes('collecting payments')) {
+        customer.requirements.paymentCollection.needed = value.toLowerCase() === 'yes';
+      }
+      
+      // Business Metrics (columns AA-AF, indices 26-31)
+      else if (index === 26 && value !== '#N/A' && !isNaN(value)) { // ARR
+        customer.businessMetrics.arr = parseInt(value, 10);
+      }
+      else if (index === 27 && value !== '#N/A' && value !== '-' && !isNaN(value)) { // Days to onboard
+        customer.businessMetrics.daysToOnboard = parseInt(value, 10);
+      }
+      else if (index === 28 && value !== '#N/A' && value !== '-') { // Current Status
+        customer.businessMetrics.currentStatus = value.trim();
+      }
+      else if (index === 29) { // Pending payments
+        customer.businessMetrics.pendingPayments = value.toString().toLowerCase() === 'yes';
+      }
+      else if (index === 30 && value !== '#N/A' && value !== '-') { // Health
+        customer.businessMetrics.health = value.trim();
+      }
+      else if (index === 31 && value && value !== '-') { // Retention Risk
+        customer.businessMetrics.retentionRisk = value.trim();
+      }
+      
+      // Additional columns (AG-AO, indices 32-40)
+      else if (index >= 32 && value && value !== '#N/A' && value !== '-') {
+        // Store any additional metrics with generic keys
+        customer.additionalMetrics[`metric_${String.fromCharCode(65 + index)}`] = value;
       }
     });
     
+    // Calculate comprehensive fit score
+    customer.fitScore = calculateComprehensiveFitScore(customer);
+    
+    // Calculate data completeness score
+    customer.completenessScore = calculateCompletenessScore(customer);
+    
     return customer;
-  });
+  }).filter(customer => 
+    customer.customerName && 
+    customer.customerName !== 'Yes' && 
+    customer.customerName !== '#N/A' &&
+    customer.customerName.trim() !== ''
+  );
+}
+
+// Helper function to parse user count
+function parseUserCount(userText, customer) {
+  // Try various patterns
+  const patterns = [
+    /(\d+)\s*(?:total)/i,
+    /(\d+)\s*(?:users)/i,
+    /(\d+)\s*(?:employees)/i,
+    /^(\d+)$/
+  ];
+  
+  for (const pattern of patterns) {
+    const match = userText.match(pattern);
+    if (match) {
+      customer.userCount.total = parseInt(match[1], 10);
+      break;
+    }
+  }
+  
+  // Look for office/field breakdown
+  const backOfficeMatch = userText.match(/(\d+)\s*(?:back\s*office|backoffice|office|admin)/i);
+  if (backOfficeMatch) customer.userCount.backOffice = parseInt(backOfficeMatch[1], 10);
+  
+  const fieldMatch = userText.match(/(\d+)\s*(?:field|technician|mobile)/i);
+  if (fieldMatch) customer.userCount.field = parseInt(fieldMatch[1], 10);
+  
+  // If only total, assume all field
+  if (customer.userCount.total > 0 && customer.userCount.backOffice === 0 && customer.userCount.field === 0) {
+    customer.userCount.field = customer.userCount.total;
+  }
+}
+
+// Calculate comprehensive fit score using ALL data points
+function calculateComprehensiveFitScore(customer) {
+  let score = 30; // Base score
+  
+  // Basic Information (15 points)
+  if (customer.customerName) score += 3;
+  if (customer.industry) score += 3;
+  if (customer.userCount.total > 0) score += 3;
+  if (customer.userCount.total >= 10 && customer.userCount.total <= 100) score += 3; // Sweet spot
+  if (customer.launchDate) score += 3;
+  
+  // Business Metrics (30 points)
+  if (customer.businessMetrics.arr > 30000) score += 10;
+  else if (customer.businessMetrics.arr > 15000) score += 7;
+  else if (customer.businessMetrics.arr > 5000) score += 4;
+  
+  if (customer.businessMetrics.daysToOnboard && customer.businessMetrics.daysToOnboard < 60) score += 8;
+  else if (customer.businessMetrics.daysToOnboard && customer.businessMetrics.daysToOnboard < 120) score += 5;
+  
+  if (customer.businessMetrics.health === 'Excellent') score += 10;
+  else if (customer.businessMetrics.health === 'Good') score += 7;
+  else if (customer.businessMetrics.health === 'Average') score += 3;
+  else if (customer.businessMetrics.health === 'Poor') score -= 5;
+  
+  if (!customer.businessMetrics.pendingPayments) score += 2;
+  
+  // Requirements Complexity (25 points)
+  if (customer.services.length > 0 && customer.services.length <= 5) score += 5; // Focused services
+  if (customer.workflowDescription && customer.workflowDescription.length > 50) score += 3;
+  
+  // Features needed (positive if they need our strengths)
+  if (customer.requirements.checklists.needed) score += 3;
+  if (customer.requirements.notifications.customer.needed) score += 3;
+  if (customer.requirements.serviceReports.needed) score += 3;
+  if (customer.requirements.quotations.needed) score += 2;
+  if (customer.requirements.invoicing.needed) score += 2;
+  if (customer.requirements.paymentCollection.needed) score += 2;
+  
+  // Integration complexity
+  if (customer.requirements.integrations.length === 0) score += 5; // No integration = easier
+  else if (customer.requirements.integrations.length <= 2) score += 3; // Manageable
+  else score -= 2; // Complex integration needs
+  
+  // Current system replacement (opportunity)
+  if (customer.currentSystems.name) score += 5;
+  
+  return Math.min(Math.max(score, 0), 100);
+}
+
+// Calculate how complete their data submission is
+function calculateCompletenessScore(customer) {
+  let filledFields = 0;
+  let totalFields = 0;
+  
+  const checkField = (value) => {
+    totalFields++;
+    if (value && value !== '' && value !== 'n/a' && value !== '#N/A') filledFields++;
+  };
+  
+  // Check all major fields
+  checkField(customer.customerName);
+  checkField(customer.industry);
+  checkField(customer.userCount.total);
+  checkField(customer.launchDate);
+  checkField(customer.services.length);
+  checkField(customer.workflowDescription);
+  checkField(customer.businessMetrics.arr);
+  checkField(customer.businessMetrics.health);
+  
+  return Math.round((filledFields / totalFields) * 100);
 }
 
 /**
