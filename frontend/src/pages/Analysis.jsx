@@ -51,7 +51,7 @@ const Analysis = () => {
   // Run analysis on transcript
   const handleAnalyzeTranscript = async () => {
     if (!transcriptText.trim()) {
-      alert('Please enter a transcript or select a Google Doc');
+      window.alert('Please enter a transcript or select a Google Doc');
       return;
     }
     
@@ -63,7 +63,7 @@ const Analysis = () => {
     } catch (error) {
       console.error('Error analyzing transcript:', error);
       setIsAnalyzing(false);
-      alert('Error analyzing transcript. Please try again.');
+      window.alert('Error analyzing transcript. Please try again.');
     }
   };
   
