@@ -76,21 +76,20 @@ const Dashboard = () => {
   };
 
   // Load dashboard metrics
-// Load dashboard metrics
-const loadDashboardMetrics = async () => {
-  try {
-    setIsLoadingMetrics(true);
-    const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/dashboard/metrics`);
-    const result = await response.json();
-    if (result.success) {
-      setDashboardMetrics(result.data);
+  const loadDashboardMetrics = async () => {
+    try {
+      setIsLoadingMetrics(true);
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/dashboard/metrics`);
+      const result = await response.json();
+      if (result.success) {
+        setDashboardMetrics(result.data);
+      }
+    } catch (error) {
+      console.error('Error loading dashboard metrics:', error);
+    } finally {
+      setIsLoadingMetrics(false);
     }
-  } catch (error) {
-    console.error('Error loading dashboard metrics:', error);
-  } finally {
-    setIsLoadingMetrics(false);
-  }
-};
+  };
 
   // Handle uploading a transcript
   const handleUpload = () => {
@@ -204,65 +203,97 @@ const loadDashboardMetrics = async () => {
   }, [activeTab]);
 
   // Main dashboard tab
-// In Dashboard.jsx, update the renderDashboard function to wrap all elements:
+  const renderDashboard = () => (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
 
-const renderDashboard = () => (
-  <div className="p-6">
-    <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <DashboardCard
+          title="Recent Analyses"
+          icon={<FileText className="h-6 w-6 text-blue-600" />}
+          value={recentAnalyses.length || "0"}
+          description="Analyzed in last 30 days"
+          loading={isLoadingMetrics}
+        />
+        <DashboardCard
+          title="Average Fit Score"
+          icon={<BarChart2 className="h-6 w-6 text-green-600" />}
+          value={calculateAverageFitScore()}
+          description="Across all prospects"
+          loading={isLoadingMetrics}
+        />
+        <DashboardCard
+          title="Configuration Status"
+          icon={<Settings className="h-6 w-6 text-purple-600" />}
+          value="Connected"
+          description="MongoDB and APIs connected"
+          loading={isLoadingMetrics}
+        />
+      </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-      <DashboardCard
-        title="Recent Analyses"
-        icon={<FileText className="h-6 w-6 text-blue-600" />}
-        value={recentAnalyses.length || "0"}
-        description="Analyzed in last 30 days"
-        loading={isLoadingMetrics}
-      />
-      <DashboardCard
-        title="Average Fit Score"
-        icon={<BarChart2 className="h-6 w-6 text-green-600" />}
-        value={calculateAverageFitScore()}
-        description="Across all prospects"
-        loading={isLoadingMetrics}
-      />
-      <DashboardCard
-        title="Configuration Status"
-        icon={<Settings className="h-6 w-6 text-purple-600" />}
-        value="Connected"
-        description="MongoDB and APIs connected"
-        loading={isLoadingMetrics}
-      />
-    </div>
-
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Recent Prospects</h2>
-          <button
-            className="text-blue-600 text-sm"
-            onClick={() => setActiveTab('historical')}
-          >
-            View All
-          </button>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">Recent Prospects</h2>
+            <button
+              className="text-blue-600 text-sm"
+              onClick={() => setActiveTab('historical')}
+            >
+              View All
+            </button>
+          </div>
+          <div className="space-y-4">
+            {recentAnalyses.length > 0 ? (
+              recentAnalyses.map((analysis, index) => (
+                <ProspectItem
+                  key={index}
+                  name={analysis.customerName}
+                  industry={analysis.industry}
+                  date={analysis.date || new Date(analysis.timestamp).toLocaleDateString()}
+                  score={analysis.fitScore}
+                  onClick={() => {
+                    setAnalysisResults(analysis);
+                    setActiveTab('analysis');
+                  }}
+                />
+              ))
+            ) : (
+              <div className="text-center py-4 text-gray-500">
+                No recent analyses. Click "New Analysis" to get started.
+              </div>
+            )}
+          </div>
         </div>
-        <div className="space-y-4">
-          {recentAnalyses.length > 0 ? (
-            recentAnalyses.map((analysis, index) => (
-              <ProspectItem
-                key={index}
-                name={analysis.customerName}
-                industry={analysis.industry}
-                date={analysis.date || new Date(analysis.timestamp).toLocaleDateString()}
-                score={analysis.fitScore}
-                onClick={() => {
-                  setAnalysisResults(analysis);
-                  setActiveTab('analysis');
-                }}
-              />
-            ))
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">Industry Distribution</h2>
+            <div className="flex space-x-2">
+              <button className="text-sm text-gray-500">Last 30 Days</button>
+              <button className="text-sm text-blue-600">All Time</button>
+            </div>
+          </div>
+          
+          {dashboardMetrics.topIndustries && dashboardMetrics.topIndustries.length > 0 ? (
+            <>
+              <div className="h-64 flex items-center justify-center">
+                <PieChart className="h-48 w-48 text-gray-300" />
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                {dashboardMetrics.topIndustries.map((item, index) => {
+                  const colors = ['bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-red-500'];
+                  return (
+                    <div key={item.industry} className="flex items-center">
+                      <div className={`w-3 h-3 rounded-full ${colors[index % colors.length]} mr-2`}></div>
+                      <span className="text-sm">{item.industry} ({item.percentage}%)</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           ) : (
-            <div className="text-center py-4 text-gray-500">
-              No recent analyses. Click "New Analysis" to get started.
+            <div className="h-64 flex items-center justify-center text-gray-500">
+              <p>No industry data available yet</p>
             </div>
           )}
         </div>
@@ -270,111 +301,77 @@ const renderDashboard = () => (
 
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Industry Distribution</h2>
-          <div className="flex space-x-2">
-            <button className="text-sm text-gray-500">Last 30 Days</button>
-            <button className="text-sm text-blue-600">All Time</button>
-          </div>
+          <h2 className="text-lg font-semibold">Analysis Activity</h2>
+          <button
+            className="text-blue-600 text-sm"
+            onClick={() => setActiveTab('historical')}
+          >
+            View Details
+          </button>
         </div>
-        
-        {dashboardMetrics.topIndustries && dashboardMetrics.topIndustries.length > 0 ? (
-          <>
-            <div className="h-64 flex items-center justify-center">
-              <PieChart className="h-48 w-48 text-gray-300" />
-            </div>
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              {dashboardMetrics.topIndustries.map((item, index) => {
-                const colors = ['bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-red-500'];
-                return (
-                  <div key={item.industry} className="flex items-center">
-                    <div className={`w-3 h-3 rounded-full ${colors[index % colors.length]} mr-2`}></div>
-                    <span className="text-sm">{item.industry} ({item.percentage}%)</span>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        ) : (
-          <div className="h-64 flex items-center justify-center text-gray-500">
-            <p>No industry data available yet</p>
-          </div>
-        )}
-      </div>
-    </div>
-
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold">Analysis Activity</h2>
-        <button
-          className="text-blue-600 text-sm"
-          onClick={() => setActiveTab('historical')}
-        >
-          View Details
-        </button>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead>
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Industry</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fit Score</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {recentAnalyses.length > 0 ? (
-              recentAnalyses.map((analysis, index) => (
-                <tr key={index}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {analysis.customerName}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {analysis.date || new Date(analysis.timestamp).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {analysis.industry}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <div className="flex items-center">
-                      <span className={`mr-2 font-medium ${getFitScoreColor(analysis.fitScore)}`}>
-                        {analysis.fitScore}%
-                      </span>
-                      <div className="w-24 bg-gray-200 rounded-full h-2.5">
-                        <div
-                          className={`${getFitScoreBackgroundColor(analysis.fitScore)} h-2.5 rounded-full`}
-                          style={{width: `${analysis.fitScore}%`}}
-                        ></div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead>
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Industry</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fit Score</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {recentAnalyses.length > 0 ? (
+                recentAnalyses.map((analysis, index) => (
+                  <tr key={index}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {analysis.customerName}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {analysis.date || new Date(analysis.timestamp).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {analysis.industry}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <div className="flex items-center">
+                        <span className={`mr-2 font-medium ${getFitScoreColor(analysis.fitScore)}`}>
+                          {analysis.fitScore}%
+                        </span>
+                        <div className="w-24 bg-gray-200 rounded-full h-2.5">
+                          <div
+                            className={`${getFitScoreBackgroundColor(analysis.fitScore)} h-2.5 rounded-full`}
+                            style={{width: `${analysis.fitScore}%`}}
+                          ></div>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <button
-                      className="text-blue-600 hover:text-blue-800"
-                      onClick={() => {
-                        setAnalysisResults(analysis);
-                        setActiveTab('analysis');
-                      }}
-                    >
-                      View
-                    </button>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <button
+                        className="text-blue-600 hover:text-blue-800"
+                        onClick={() => {
+                          setAnalysisResults(analysis);
+                          setActiveTab('analysis');
+                        }}
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
+                    No analysis activity yet
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
-                  No analysis activity yet
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 
   // Historical data tab
   const renderHistoricalData = () => (
@@ -1142,19 +1139,19 @@ const renderDashboard = () => (
   );
 
   // Helper functions
-const calculateAverageFitScore = () => {
-  if (dashboardMetrics.averageFitScore) {
-    return `${Math.round(dashboardMetrics.averageFitScore)}%`;
-  }
-  
-  // Fallback to calculating from recent analyses if metrics not available
-  if (!recentAnalyses || recentAnalyses.length === 0) {
-    return "0%";
-  }
+  const calculateAverageFitScore = () => {
+    if (dashboardMetrics.averageFitScore) {
+      return `${Math.round(dashboardMetrics.averageFitScore)}%`;
+    }
+    
+    // Fallback to calculating from recent analyses if metrics not available
+    if (!recentAnalyses || recentAnalyses.length === 0) {
+      return "0%";
+    }
 
-  const sum = recentAnalyses.reduce((total, analysis) => total + (analysis.fitScore || 0), 0);
-  return `${Math.round(sum / recentAnalyses.length)}%`;
-};
+    const sum = recentAnalyses.reduce((total, analysis) => total + (analysis.fitScore || 0), 0);
+    return `${Math.round(sum / recentAnalyses.length)}%`;
+  };
 
   const getFitScoreColor = (score) => {
     if (score >= 80) return 'text-green-600';
@@ -1182,34 +1179,9 @@ const calculateAverageFitScore = () => {
     return 'Very Low';
   };
 
+  // MAIN RENDER - Clean structure with single root element
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <DashboardCard
-          title="Recent Analyses"
-          icon={<FileText className="h-6 w-6 text-blue-600" />}
-          value={recentAnalyses.length || "0"}
-          description="Analyzed in last 30 days"
-          loading={isLoadingMetrics}
-        />
-        <DashboardCard
-          title="Average Fit Score"
-          icon={<BarChart2 className="h-6 w-6 text-green-600" />}
-          value={calculateAverageFitScore()}
-          description="Across all prospects"
-          loading={isLoadingMetrics}
-        />
-        <DashboardCard
-          title="Configuration Status"
-          icon={<Settings className="h-6 w-6 text-purple-600" />}
-          value="Connected"
-          description="MongoDB and APIs connected"
-          loading={isLoadingMetrics}
-        />
-      </div>
-      <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
       <div className="w-64 bg-white shadow-md">
         <div className="p-6">
