@@ -53,7 +53,8 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
   };
   
   const handleNewAnalysis = () => {
-    navigate('/analysis?new=true');
+    // Navigate to dashboard with a parameter to open the upload modal
+    navigate('/dashboard?action=new-analysis');
   };
   
   return (
