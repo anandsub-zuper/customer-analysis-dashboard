@@ -32,6 +32,7 @@ const jwtClient = new JWT({
 const sheetsRoutes = require('./routes/sheetsRoutes');
 const docsRoutes = require('./routes/docsRoutes');
 const analysisRoutes = require('./routes/analysisRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
 
 // Initialize app
 const app = express();
@@ -67,6 +68,7 @@ async function initializeServer() {
 app.use('/api/sheets', sheetsRoutes);
 app.use('/api/docs', docsRoutes);
 app.use('/api/analysis', analysisRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
