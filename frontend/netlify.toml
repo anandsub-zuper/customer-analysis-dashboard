@@ -1,0 +1,39 @@
+# Netlify configuration for Customer Analysis Dashboard
+
+[build]
+  # Build command
+  command = "npm run build"
+  
+  # Directory to deploy
+  publish = "build"
+
+[build.environment]
+  # Node version for builds
+  NODE_VERSION = "18"
+  
+  # Your Backend API URL
+  REACT_APP_API_URL = "https://customer-intelligent-analytics-8442064cee16.herokuapp.com/api"
+  
+  # Ignore warnings during build
+  CI = "false"
+
+# Redirects for React Router
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers for security and performance
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer-when-downgrade"
+
+# Cache control for static assets
+[[headers]]
+  for = "/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
