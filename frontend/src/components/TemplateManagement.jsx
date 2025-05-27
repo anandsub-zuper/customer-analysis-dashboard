@@ -106,11 +106,11 @@ const TemplateManagement = () => {
         setShowModal(false);
         loadTemplates();
       } else {
-        alert(`Error: ${result.message}`);
+        window.alert(`Error: ${result.message}`);
       }
     } catch (error) {
       console.error('Error saving template:', error);
-      alert('Error saving template');
+      window.alert('Error saving template');
     }
   };
 
@@ -129,11 +129,11 @@ const TemplateManagement = () => {
       if (result.success) {
         loadTemplates();
       } else {
-        alert(`Error: ${result.message}`);
+      window.alert(`Error: ${result.message}`);
       }
     } catch (error) {
       console.error('Error deleting template:', error);
-      alert('Error deleting template');
+     window.alert('Error deleting template');
     }
   };
 
