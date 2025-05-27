@@ -115,7 +115,7 @@ const TemplateManagement = () => {
   };
 
   const handleDeleteTemplate = async (templateId) => {
-    if (!confirm('Are you sure you want to delete this template?')) {
+    if (!window.confirm('Are you sure you want to delete this template?')) {
       return;
     }
 
