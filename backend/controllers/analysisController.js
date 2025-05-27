@@ -1,12 +1,13 @@
 const openaiService = require('../services/openaiService');
 const docsService = require('../services/googleDocsService');
+const analysisService = require('../services/analysisService');
 
 // @route   POST api/analysis/transcript
 // @desc    Analyze a meeting transcript
 // @access  Private
 exports.analyzeTranscript = async (req, res) => {
   try {
-    const { transcript, documentId } = req.body;
+    const { transcript, documentId, templateId } = req.body;
     
     if (!transcript && !documentId) {
       return res.status(400).json({ 
@@ -39,25 +40,22 @@ exports.analyzeTranscript = async (req, res) => {
     }
     
     // Analyze the transcript with OpenAI using RAG
-    // The openaiService will retrieve historical data and include it in the prompt
     try {
       const analysisResults = await openaiService.analyzeTranscript(transcriptText);
       
-      // Add unique ID and date if not present
-      const analysisId = 'analysis-' + Date.now();
-      analysisResults.id = analysisId;
-      if (!analysisResults.date) {
-        analysisResults.date = new Date().toLocaleDateString();
-      }
+      // Add document reference and template if provided
+      analysisResults.documentId = documentId || null;
+      analysisResults.templateId = templateId || null;
+      analysisResults.timestamp = new Date();
       
-      // Store the analysis results
-      storeAnalysisResults(analysisResults);
+      // Save analysis results to MongoDB
+      const savedAnalysis = await analysisService.saveAnalysisResults(analysisResults);
       
-      // Return the complete analysis results
+      // Return the complete analysis results with MongoDB ID
       res.json({
         success: true,
-        message: 'Analysis completed',
-        results: analysisResults
+        message: 'Analysis completed and saved',
+        results: savedAnalysis
       });
     } catch (aiErr) {
       console.error('Error with OpenAI analysis:', aiErr);
@@ -84,14 +82,13 @@ exports.getAnalysisHistory = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
     
-    // Get analysis history
-    // In a production application, this would fetch from a database
-    const history = getStoredAnalysisHistory(limit);
+    // Get analysis history from MongoDB
+    const analyses = await analysisService.listRecentAnalyses(limit);
     
     res.json({
       success: true,
       message: 'Analysis history retrieved',
-      data: history
+      data: analyses
     });
   } catch (err) {
     console.error('Error getting analysis history:', err);
@@ -110,15 +107,8 @@ exports.getAnalysis = async (req, res) => {
   try {
     const analysisId = req.params.id;
     
-    // Find the analysis by ID
-    const analysis = analysisHistory.find(item => item.id === analysisId);
-    
-    if (!analysis) {
-      return res.status(404).json({
-        success: false,
-        message: 'Analysis not found'
-      });
-    }
+    // Get analysis from MongoDB
+    const analysis = await analysisService.getAnalysisById(analysisId);
     
     res.json({
       success: true,
@@ -127,6 +117,14 @@ exports.getAnalysis = async (req, res) => {
     });
   } catch (err) {
     console.error('Error getting analysis:', err);
+    
+    if (err.message === 'Analysis not found') {
+      return res.status(404).json({
+        success: false,
+        message: 'Analysis not found'
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Server error getting analysis',
@@ -142,15 +140,8 @@ exports.exportAnalysisAsPdf = async (req, res) => {
   try {
     const analysisId = req.params.id;
     
-    // Find the analysis by ID
-    const analysis = analysisHistory.find(item => item.id === analysisId);
-    
-    if (!analysis) {
-      return res.status(404).json({
-        success: false,
-        message: 'Analysis not found'
-      });
-    }
+    // Get analysis from MongoDB
+    const analysis = await analysisService.getAnalysisById(analysisId);
     
     // For now, return a placeholder message
     // In a real implementation, you would generate a PDF
@@ -167,6 +158,14 @@ exports.exportAnalysisAsPdf = async (req, res) => {
     // res.send(pdfBuffer);
   } catch (err) {
     console.error('Error exporting analysis:', err);
+    
+    if (err.message === 'Analysis not found') {
+      return res.status(404).json({
+        success: false,
+        message: 'Analysis not found'
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Server error exporting analysis',
@@ -182,25 +181,23 @@ exports.deleteAnalysis = async (req, res) => {
   try {
     const analysisId = req.params.id;
     
-    // Find the analysis index
-    const analysisIndex = analysisHistory.findIndex(item => item.id === analysisId);
+    // Delete from MongoDB
+    const result = await analysisService.deleteAnalysis(analysisId);
     
-    if (analysisIndex === -1) {
+    res.json({
+      success: true,
+      message: 'Analysis deleted successfully'
+    });
+  } catch (err) {
+    console.error('Error deleting analysis:', err);
+    
+    if (err.message === 'Analysis not found') {
       return res.status(404).json({
         success: false,
         message: 'Analysis not found'
       });
     }
     
-    // Remove the analysis
-    analysisHistory.splice(analysisIndex, 1);
-    
-    res.json({
-      success: true,
-      message: 'Analysis deleted'
-    });
-  } catch (err) {
-    console.error('Error deleting analysis:', err);
     res.status(500).json({
       success: false,
       message: 'Server error deleting analysis',
@@ -208,107 +205,5 @@ exports.deleteAnalysis = async (req, res) => {
     });
   }
 };
-
-// In-memory storage for analysis results (temporary solution)
-// In a production application, this would be replaced with a database
-let analysisHistory = [
-  {
-    id: 'sample-analysis-1',
-    customerName: "Bullfrog Spas",
-    industry: "Manufacturing and Retail",
-    fitScore: 91,
-    date: "Jan 15, 2024",
-    userCount: {
-      total: 30,
-      backOffice: 9,
-      field: 21
-    },
-    services: ["Installation", "Repair", "Maintenance", "Site Survey"],
-    requirements: {
-      keyFeatures: ["Mobile App", "Customer Portal", "Checklists"],
-      integrations: ["Hubspot", "QuickBooks"]
-    }
-  },
-  {
-    id: 'sample-analysis-2',
-    customerName: "Greenline Electrify",
-    industry: "Solar, Residential and Commercial",
-    fitScore: 89,
-    date: "Dec 18, 2023",
-    userCount: {
-      total: 12,
-      backOffice: 3,
-      field: 9
-    },
-    services: ["Installation", "Maintenance"]
-  },
-  {
-    id: 'sample-analysis-3',
-    customerName: "Jusclean Services",
-    industry: "Commercial Cleaning Services",
-    fitScore: 76,
-    date: "Dec 18, 2023",
-    userCount: {
-      total: 25,
-      backOffice: 5,
-      field: 20
-    },
-    services: ["Cleaning", "Maintenance"]
-  },
-  {
-    id: 'sample-analysis-4',
-    customerName: "LCMS Disaster Response",
-    industry: "Non-Profit Christian Disaster Response",
-    fitScore: 62,
-    date: "Dec 21, 2023",
-    userCount: {
-      total: 45,
-      backOffice: 15,
-      field: 30
-    },
-    services: ["Emergency Response", "Cleanup", "Restoration"]
-  },
-  {
-    id: 'sample-analysis-5',
-    customerName: "FITNESS FOR LIFE SPORTING GOODS",
-    industry: "Sporting Goods",
-    fitScore: 42,
-    date: "Jan 3, 2024",
-    userCount: {
-      total: 15,
-      backOffice: 10,
-      field: 5
-    },
-    services: ["Equipment Installation", "Repair"]
-  }
-];
-
-/**
- * Store analysis results
- * @param {Object} results - Analysis results to store
- */
-function storeAnalysisResults(results) {
-  // Add date if not present
-  if (!results.date) {
-    results.date = new Date().toLocaleDateString();
-  }
-  
-  // Insert at the beginning of the array
-  analysisHistory.unshift(results);
-  
-  // Limit the size of the history
-  if (analysisHistory.length > 100) {
-    analysisHistory = analysisHistory.slice(0, 100);
-  }
-}
-
-/**
- * Get stored analysis history
- * @param {number} limit - Maximum number of items to return
- * @returns {Array} - Analysis history
- */
-function getStoredAnalysisHistory(limit) {
-  return analysisHistory.slice(0, limit);
-}
 
 module.exports = exports;
