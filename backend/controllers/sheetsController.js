@@ -11,15 +11,28 @@ const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 // @access  Private
 exports.listSheets = async (req, res) => {
   try {
-    // Use a predefined spreadsheet ID for historical data
-    // In production, you might store this in environment variables
-    const spreadsheetId = process.env.HISTORICAL_DATA_SPREADSHEET_ID || '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms'; // Example Google Sheets ID
+    // Use the configured spreadsheet ID
+    const spreadsheetId = process.env.HISTORICAL_DATA_SPREADSHEET_ID;
+    
+    if (!spreadsheetId) {
+      return res.status(500).json({ 
+        message: 'Historical data spreadsheet ID not configured',
+        success: false 
+      });
+    }
     
     const sheets = await sheetsService.listSheets(spreadsheetId);
-    res.json(sheets);
+    res.json({
+      success: true,
+      data: sheets
+    });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
+    console.error('Error in listSheets:', err.message);
+    res.status(500).json({ 
+      message: 'Server error listing sheets',
+      error: err.message,
+      success: false 
+    });
   }
 };
 
@@ -30,15 +43,35 @@ exports.getSheetData = async (req, res) => {
   try {
     const { spreadsheetId, range } = req.query;
     
-    if (!spreadsheetId || !range) {
-      return res.status(400).json({ message: 'SpreadsheetId and range are required' });
+    // Use the configured spreadsheet ID if none provided
+    const sheetId = spreadsheetId || process.env.HISTORICAL_DATA_SPREADSHEET_ID;
+    
+    if (!sheetId) {
+      return res.status(500).json({ 
+        message: 'Historical data spreadsheet ID not configured',
+        success: false 
+      });
     }
     
-    const data = await sheetsService.getSheetData(spreadsheetId, range);
-    res.json(data);
+    if (!range) {
+      return res.status(400).json({ 
+        message: 'Range is required',
+        success: false 
+      });
+    }
+    
+    const data = await sheetsService.getSheetData(sheetId, range);
+    res.json({
+      success: true,
+      data: data
+    });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
+    console.error('Error in getSheetData:', err.message);
+    res.status(500).json({ 
+      message: 'Server error getting sheet data',
+      error: err.message,
+      success: false 
+    });
   }
 };
 
