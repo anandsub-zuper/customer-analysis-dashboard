@@ -1183,7 +1183,33 @@ const calculateAverageFitScore = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <DashboardCard
+          title="Recent Analyses"
+          icon={<FileText className="h-6 w-6 text-blue-600" />}
+          value={recentAnalyses.length || "0"}
+          description="Analyzed in last 30 days"
+          loading={isLoadingMetrics}
+        />
+        <DashboardCard
+          title="Average Fit Score"
+          icon={<BarChart2 className="h-6 w-6 text-green-600" />}
+          value={calculateAverageFitScore()}
+          description="Across all prospects"
+          loading={isLoadingMetrics}
+        />
+        <DashboardCard
+          title="Configuration Status"
+          icon={<Settings className="h-6 w-6 text-purple-600" />}
+          value="Connected"
+          description="MongoDB and APIs connected"
+          loading={isLoadingMetrics}
+        />
+      </div>
+      <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
       <div className="w-64 bg-white shadow-md">
         <div className="p-6">
