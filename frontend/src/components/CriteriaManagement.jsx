@@ -23,7 +23,7 @@ const CriteriaManagement = () => {
 
   const loadCriteria = async () => {
     try {
-      const response = await fetch('/api/config/criteria');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/criteria`);
       const result = await response.json();
       
       if (result.success) {
