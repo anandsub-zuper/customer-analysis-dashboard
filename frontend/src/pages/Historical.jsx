@@ -1,6 +1,6 @@
 // src/pages/Historical.jsx
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, Download } from 'lucide-react';
+import { Search, FileText, Download, Clock } from 'lucide-react';
 import Button from '../components/common/Button';
 import { listSheets, getSheetData } from '../api/sheetsApi';
 
@@ -16,6 +16,7 @@ const Historical = () => {
     const loadSheets = async () => {
       try {
         setIsLoading(true);
+        setError(null);
         const sheetsData = await listSheets();
         setSheets(sheetsData);
         if (sheetsData.length > 0) {
@@ -23,7 +24,8 @@ const Historical = () => {
         }
         setIsLoading(false);
       } catch (err) {
-        setError('Error loading sheets. Please try again.');
+        console.error('Error loading sheets:', err);
+        setError('Error loading sheets. Please check your configuration and try again.');
         setIsLoading(false);
       }
     };
@@ -37,13 +39,18 @@ const Historical = () => {
       const loadSheetData = async () => {
         try {
           setIsLoading(true);
-          // This is a placeholder - in a real app, you'd need the spreadsheetId
-          // For demo purposes, we're using a dummy ID
-          const spreadsheetId = '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms';
-          const data = await getSheetData(spreadsheetId, `${selectedSheet}!A1:Z1000`);
+          setError(null);
+          
+          // Let backend use its configured spreadsheet ID
+          // Use AO1000 to match backend's HISTORICAL_DATA_RANGE config
+          const range = `${selectedSheet}!A1:AO1000`;
+          
+          // Don't pass spreadsheetId - let backend use its configured value
+          const data = await getSheetData(null, range);
           setSheetData(data);
           setIsLoading(false);
         } catch (err) {
+          console.error('Error loading sheet data:', err);
           setError('Error loading sheet data. Please try again.');
           setIsLoading(false);
         }
@@ -82,8 +89,13 @@ const Historical = () => {
               <FileText className="h-5 w-5 text-green-600 mr-2" />
               <h2 className="font-medium">Google Sheets Data Source</h2>
             </div>
-            {isLoading && (
+            {isLoading ? (
               <div className="text-sm text-gray-500">Loading...</div>
+            ) : (
+              <div className="flex items-center text-sm text-gray-500">
+                <Clock className="h-4 w-4 mr-1" />
+                <span>Last synced: {new Date().toLocaleTimeString()}</span>
+              </div>
             )}
           </div>
         </div>
@@ -131,7 +143,7 @@ const Historical = () => {
                         key={cellIndex}
                         className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"
                       >
-                        {cell}
+                        {cell || '-'}
                       </td>
                     ))}
                   </tr>
@@ -140,7 +152,7 @@ const Historical = () => {
             </table>
           ) : (
             <div className="p-6 text-center text-gray-500">
-              {isLoading ? 'Loading data...' : 'No data available'}
+              {isLoading ? 'Loading data...' : sheets.length === 0 ? 'No sheets available' : 'No data available'}
             </div>
           )}
         </div>
