@@ -19,7 +19,7 @@ const ModelSettings = () => {
 
   const loadModelConfig = async () => {
     try {
-      const response = await fetch('/api/config/model');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/model`);
       const result = await response.json();
       
       if (result.success) {
@@ -38,7 +38,7 @@ const ModelSettings = () => {
       setSaving(true);
       setMessage('');
 
-      const response = await fetch('/api/config/model', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/model`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
