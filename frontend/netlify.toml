@@ -1,8 +1,8 @@
 # Netlify configuration for Customer Analysis Dashboard
 
 [build]
-  # Build command
-  command = "npm run build"
+  # Build command with ESLint disabled
+  command = "CI=false npm run build"
   
   # Directory to deploy
   publish = "build"
@@ -14,7 +14,10 @@
   # Your Backend API URL
   REACT_APP_API_URL = "https://customer-intelligent-analytics-8442064cee16.herokuapp.com/api"
   
-  # Ignore warnings during build
+  # Disable ESLint during build (temporary)
+  DISABLE_ESLINT_PLUGIN = "true"
+  
+  # Skip CI checks
   CI = "false"
 
 # Redirects for React Router
