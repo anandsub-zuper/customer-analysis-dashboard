@@ -140,7 +140,7 @@ const loadDashboardMetrics = async () => {
   // Run analysis on transcript
   const handleAnalyzeTranscript = async () => {
     if (!transcriptText.trim() && !selectedDocId) {
-      alert('Please enter a transcript or select a Google Doc');
+     window.alert('Please enter a transcript or select a Google Doc');
       return;
     }
 
@@ -161,7 +161,7 @@ const loadDashboardMetrics = async () => {
         // Refresh the recent analyses list
         await loadRecentAnalyses();
       } else {
-        alert(`Analysis failed: ${response.message}`);
+        window.alert(`Analysis failed: ${response.message}`);
       }
 
       setAnalyzingTranscript(false);
@@ -169,7 +169,7 @@ const loadDashboardMetrics = async () => {
     } catch (error) {
       console.error('Error analyzing transcript:', error);
       setAnalyzingTranscript(false);
-      alert('Error analyzing transcript. Please try again.');
+      window.alert('Error analyzing transcript. Please try again.');
     }
   };
 
