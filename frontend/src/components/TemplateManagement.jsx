@@ -30,7 +30,7 @@ const TemplateManagement = () => {
 
   const loadTemplates = async () => {
     try {
-      const response = await fetch('/api/config/templates');
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/templates`);
       const result = await response.json();
       
       if (result.success) {
