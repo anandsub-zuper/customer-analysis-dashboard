@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Bell, Settings, Users, Database, FileText, BarChart2, PieChart, Check, X, 
          AlertTriangle, Upload, Clock, Search, Home, Layers, ArrowRight, Clipboard, 
          Sliders, HelpCircle, ChevronRight, Award, Download, Calendar, Briefcase } from 'lucide-react';
@@ -10,6 +10,7 @@ import FileUpload from '../components/common/FileUpload';
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   
   // State for upload modal
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -42,6 +43,16 @@ const Dashboard = () => {
     
     loadInitialData();
   }, []);
+
+  // Check for URL parameters to open upload modal
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('action') === 'new-analysis') {
+      setShowUploadModal(true);
+      // Clean up the URL
+      navigate('/dashboard', { replace: true });
+    }
+  }, [location, navigate]);
 
   // Load recent analyses
   const loadRecentAnalyses = async () => {
