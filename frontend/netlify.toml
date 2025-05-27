@@ -12,7 +12,7 @@
   NODE_VERSION = "18"
   
   # Your Backend API URL
-  REACT_APP_API_URL = "https://customer-intelligent-analytics-8442064cee16.herokuapp.com/api"
+  REACT_APP_API_URL = "https://customer-intelligent-analytics-8442064cee16.herokuapp.com"
   
   # Disable ESLint during build (temporary)
   DISABLE_ESLINT_PLUGIN = "true"
