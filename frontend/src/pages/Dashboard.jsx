@@ -76,20 +76,21 @@ const Dashboard = () => {
   };
 
   // Load dashboard metrics
-  const loadDashboardMetrics = async () => {
-    try {
-      setIsLoadingMetrics(true);
-      const response = await fetch('/api/dashboard/metrics');
-      const result = await response.json();
-      if (result.success) {
-        setDashboardMetrics(result.data);
-      }
-    } catch (error) {
-      console.error('Error loading dashboard metrics:', error);
-    } finally {
-      setIsLoadingMetrics(false);
+// Load dashboard metrics
+const loadDashboardMetrics = async () => {
+  try {
+    setIsLoadingMetrics(true);
+    const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/dashboard/metrics`);
+    const result = await response.json();
+    if (result.success) {
+      setDashboardMetrics(result.data);
     }
-  };
+  } catch (error) {
+    console.error('Error loading dashboard metrics:', error);
+  } finally {
+    setIsLoadingMetrics(false);
+  }
+};
 
   // Handle uploading a transcript
   const handleUpload = () => {
@@ -265,14 +266,38 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Industry Distribution</h2>
-            <div className="flex space-x-2">
-              <button className="text-sm text-gray-500">Last 30 Days</button>
-              <button className="text-sm text-blue-600">All Time</button>
+         <div className="bg-white rounded-lg shadow p-6">
+  <div className="flex justify-between items-center mb-4">
+    <h2 className="text-lg font-semibold">Industry Distribution</h2>
+    <div className="flex space-x-2">
+      <button className="text-sm text-gray-500">Last 30 Days</button>
+      <button className="text-sm text-blue-600">All Time</button>
+    </div>
+  </div>
+ {dashboardMetrics.topIndustries && dashboardMetrics.topIndustries.length > 0 ? (
+    <>
+      <div className="h-64 flex items-center justify-center">
+        <PieChart className="h-48 w-48 text-gray-300" />
+      </div>
+      <div className="grid grid-cols-2 gap-2 mt-4">
+        {dashboardMetrics.topIndustries.map((item, index) => {
+          const colors = ['bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-red-500'];
+          return (
+            <div key={item.industry} className="flex items-center">
+              <div className={`w-3 h-3 rounded-full ${colors[index % colors.length]} mr-2`}></div>
+              <span className="text-sm">{item.industry} ({item.percentage}%)</span>
             </div>
-          </div>
+          );
+        })}
+      </div>
+    </>
+  ) : (
+    <div className="h-64 flex items-center justify-center text-gray-500">
+      <p>No industry data available yet</p>
+    </div>
+  )}
+</div>
+
           <div className="h-64 flex items-center justify-center">
             <PieChart className="h-48 w-48 text-gray-300" />
           </div>
@@ -1141,14 +1166,19 @@ const Dashboard = () => {
   );
 
   // Helper functions
-  const calculateAverageFitScore = () => {
-    if (!recentAnalyses || recentAnalyses.length === 0) {
-      return "0%";
-    }
+const calculateAverageFitScore = () => {
+  if (dashboardMetrics.averageFitScore) {
+    return `${Math.round(dashboardMetrics.averageFitScore)}%`;
+  }
+  
+  // Fallback to calculating from recent analyses if metrics not available
+  if (!recentAnalyses || recentAnalyses.length === 0) {
+    return "0%";
+  }
 
-    const sum = recentAnalyses.reduce((total, analysis) => total + (analysis.fitScore || 0), 0);
-    return `${Math.round(sum / recentAnalyses.length)}%`;
-  };
+  const sum = recentAnalyses.reduce((total, analysis) => total + (analysis.fitScore || 0), 0);
+  return `${Math.round(sum / recentAnalyses.length)}%`;
+};
 
   const getFitScoreColor = (score) => {
     if (score >= 80) return 'text-green-600';
