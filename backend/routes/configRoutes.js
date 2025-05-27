@@ -86,4 +86,54 @@ router.get('/templates/default', async (req, res) => {
   }
 });
 
+router.get('/criteria', async (req, res) => {
+  try {
+    const criteria = await criteriaService.getAllCriteria();
+    res.json({ success: true, data: criteria });
+  } catch (error) {
+    console.error('Error getting criteria:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.get('/criteria/industries', async (req, res) => {
+  try {
+    const criteria = await criteriaService.getIndustryCriteria();
+    res.json({ success: true, data: criteria });
+  } catch (error) {
+    console.error('Error getting industry criteria:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.put('/criteria/industries', async (req, res) => {
+  try {
+    const criteria = await criteriaService.updateIndustryCriteria(req.body);
+    res.json({ success: true, data: criteria, message: 'Industry criteria updated successfully' });
+  } catch (error) {
+    console.error('Error updating industry criteria:', error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+router.get('/criteria/requirements', async (req, res) => {
+  try {
+    const criteria = await criteriaService.getRequirementsCriteria();
+    res.json({ success: true, data: criteria });
+  } catch (error) {
+    console.error('Error getting requirements criteria:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.put('/criteria/requirements', async (req, res) => {
+  try {
+    const criteria = await criteriaService.updateRequirementsCriteria(req.body);
+    res.json({ success: true, data: criteria, message: 'Requirements criteria updated successfully' });
+  } catch (error) {
+    console.error('Error updating requirements criteria:', error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 module.exports = router;
