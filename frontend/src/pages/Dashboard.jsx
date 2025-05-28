@@ -6,11 +6,10 @@ import { Bell, Settings, Users, Database, FileText, BarChart2, PieChart, Check, 
 import { analyzeTranscript, getAnalysisHistory } from '../api/analysisApi';
 import { listDocs, getDocContent } from '../api/docsApi';
 import { listSheets, getSheetData } from '../api/sheetsApi';
-import FileUpload from '../components/common/FileUpload';
-import { getAnalysisHistory } from '../api/analysisApi';
-import { listDocs, getDocContent } from '../api/docsApi';
 import { getTemplates } from '../api/configApi';
 import { getDashboardMetrics } from '../api/dashboardApi';
+import FileUpload from '../components/common/FileUpload';
+
 
 const Dashboard = () => {
   const navigate = useNavigate();
