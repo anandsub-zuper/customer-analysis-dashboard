@@ -3,13 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Bell, Settings, Users, Database, FileText, BarChart2, PieChart, Check, X, 
          AlertTriangle, Upload, Clock, Search, Home, Layers, ArrowRight, Clipboard, 
          Sliders, HelpCircle, ChevronRight, Award, Download, Calendar, Briefcase } from 'lucide-react';
-import { analyzeTranscript, getAnalysisHistory } from '../api/analysisApi';
+import { analyzeTranscript, getAnalysisHistory, getAnalysis } from '../api/analysisApi';
 import { listDocs, getDocContent } from '../api/docsApi';
 import { listSheets, getSheetData } from '../api/sheetsApi';
 import { getTemplates } from '../api/configApi';
 import { getDashboardMetrics } from '../api/dashboardApi';
 import FileUpload from '../components/common/FileUpload';
-
+import Button from '../components/common/Button';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -57,42 +57,47 @@ const Dashboard = () => {
     }
   }, [location, navigate]);
 
-  // Load recent analyses
+  // Load recent analyses with proper IDs
   const loadRecentAnalyses = async () => {
     try {
       const history = await getAnalysisHistory(5);
-      setRecentAnalyses(history.data || []);
+      // Ensure each analysis has an id field
+      const analysesWithIds = (history.data || []).map(analysis => ({
+        ...analysis,
+        id: analysis.id || analysis._id || analysis.analysisId
+      }));
+      setRecentAnalyses(analysesWithIds);
     } catch (error) {
       console.error('Error loading analysis history:', error);
     }
   };
 
   // Load templates
-const loadTemplates = async () => {
-  try {
-    const result = await getTemplates();
-    if (result.success) {
-      setTemplates(result.data);
+  const loadTemplates = async () => {
+    try {
+      const result = await getTemplates();
+      if (result.success) {
+        setTemplates(result.data);
+      }
+    } catch (error) {
+      console.error('Error loading templates:', error);
     }
-  } catch (error) {
-    console.error('Error loading templates:', error);
-  }
-};
+  };
 
   // Load dashboard metrics
-const loadDashboardMetrics = async () => {
-  try {
-    setIsLoadingMetrics(true);
-    const result = await getDashboardMetrics();
-    if (result.success) {
-      setDashboardMetrics(result.data);
+  const loadDashboardMetrics = async () => {
+    try {
+      setIsLoadingMetrics(true);
+      const result = await getDashboardMetrics();
+      if (result.success) {
+        setDashboardMetrics(result.data);
+      }
+    } catch (error) {
+      console.error('Error loading dashboard metrics:', error);
+    } finally {
+      setIsLoadingMetrics(false);
     }
-  } catch (error) {
-    console.error('Error loading dashboard metrics:', error);
-  } finally {
-    setIsLoadingMetrics(false);
-  }
-};
+  };
 
   // Handle uploading a transcript
   const handleUpload = () => {
@@ -104,17 +109,17 @@ const loadDashboardMetrics = async () => {
   };
 
   // Load Google Docs list
-const loadGoogleDocs = async () => {
-  try {
-    setIsLoadingDocs(true);
-    const response = await listDocs();
-    setGoogleDocs(response.files || response || []); // Handle both response formats
-    setIsLoadingDocs(false);
-  } catch (error) {
-    console.error('Error loading Google Docs:', error);
-    setIsLoadingDocs(false);
-  }
-};
+  const loadGoogleDocs = async () => {
+    try {
+      setIsLoadingDocs(true);
+      const response = await listDocs();
+      setGoogleDocs(response.files || response || []); // Handle both response formats
+      setIsLoadingDocs(false);
+    } catch (error) {
+      console.error('Error loading Google Docs:', error);
+      setIsLoadingDocs(false);
+    }
+  };
 
   // Load Google Doc content
   const handleDocSelect = async (e) => {
@@ -142,7 +147,7 @@ const loadGoogleDocs = async () => {
   // Run analysis on transcript
   const handleAnalyzeTranscript = async () => {
     if (!transcriptText.trim() && !selectedDocId) {
-     window.alert('Please enter a transcript or select a Google Doc');
+      window.alert('Please enter a transcript or select a Google Doc');
       return;
     }
 
@@ -174,9 +179,37 @@ const loadGoogleDocs = async () => {
     }
   };
 
-  // Navigate to analysis with specific result
-  const viewAnalysis = (analysis) => {
-    navigate('/analysis', { state: { analysisResults: analysis } });
+  // Enhanced viewAnalysis function with full data loading
+  const viewAnalysis = async (analysis) => {
+    // If we have an analysis ID, fetch the full details
+    if (analysis.id || analysis._id) {
+      try {
+        const analysisId = analysis.id || analysis._id;
+        const fullAnalysis = await getAnalysis(analysisId);
+        
+        // Navigate with the full analysis data
+        navigate('/analysis', { 
+          state: { 
+            analysisResults: fullAnalysis.data || fullAnalysis 
+          } 
+        });
+      } catch (error) {
+        console.error('Error loading analysis details:', error);
+        // Fallback: navigate with whatever data we have
+        navigate('/analysis', { 
+          state: { 
+            analysisResults: analysis 
+          } 
+        });
+      }
+    } else {
+      // If no ID, just navigate with the data we have
+      navigate('/analysis', { 
+        state: { 
+          analysisResults: analysis 
+        } 
+      });
+    }
   };
 
   // Helper functions
@@ -366,12 +399,12 @@ const loadGoogleDocs = async () => {
             {recentAnalyses.length > 0 ? (
               recentAnalyses.map((analysis, index) => (
                 <ProspectItem
-                  key={index}
+                  key={analysis.id || index}
                   name={analysis.customerName}
                   industry={analysis.industry}
                   date={analysis.date || new Date(analysis.timestamp).toLocaleDateString()}
                   score={analysis.fitScore}
-                  onClick={() => viewAnalysis(analysis)}
+                  analysis={analysis}
                 />
               ))
             ) : (
@@ -440,7 +473,7 @@ const loadGoogleDocs = async () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {recentAnalyses.length > 0 ? (
                 recentAnalyses.map((analysis, index) => (
-                  <tr key={index}>
+                  <tr key={analysis.id || index}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {analysis.customerName}
                     </td>
@@ -465,7 +498,7 @@ const loadGoogleDocs = async () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <button
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-blue-600 hover:text-blue-800 font-medium"
                         onClick={() => viewAnalysis(analysis)}
                       >
                         View
@@ -514,27 +547,70 @@ const DashboardCard = ({ title, icon, value, description, loading }) => (
   </div>
 );
 
-// Component for prospect items
-const ProspectItem = ({ name, industry, date, score, onClick }) => (
-  <div 
-    className="flex items-center justify-between py-2 hover:bg-gray-50 rounded-md px-2 cursor-pointer" 
-    onClick={onClick}
-  >
-    <div>
-      <p className="font-medium">{name}</p>
-      <p className="text-sm text-gray-500">{industry}</p>
-    </div>
-    <div className="flex items-center">
-      <div className={`h-8 w-8 rounded-full flex items-center justify-center mr-3 ${
-        score >= 80 ? 'bg-green-100 text-green-600' :
-        score >= 60 ? 'bg-yellow-100 text-yellow-600' :
-        'bg-red-100 text-red-600'
-      }`}>
-        <span className="text-xs font-bold">{score}%</span>
+// Component for prospect items with loading state
+const ProspectItem = ({ name, industry, date, score, analysis }) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
+  
+  const handleClick = async () => {
+    setIsLoading(true);
+    
+    // If we have an analysis ID, fetch the full details
+    if (analysis.id || analysis._id) {
+      try {
+        const analysisId = analysis.id || analysis._id;
+        const fullAnalysis = await getAnalysis(analysisId);
+        
+        // Navigate with the full analysis data
+        navigate('/analysis', { 
+          state: { 
+            analysisResults: fullAnalysis.data || fullAnalysis 
+          } 
+        });
+      } catch (error) {
+        console.error('Error loading analysis details:', error);
+        // Fallback: navigate with whatever data we have
+        navigate('/analysis', { 
+          state: { 
+            analysisResults: analysis 
+          } 
+        });
+      }
+    } else {
+      // If no ID, just navigate with the data we have
+      navigate('/analysis', { 
+        state: { 
+          analysisResults: analysis 
+        } 
+      });
+    }
+    
+    setIsLoading(false);
+  };
+  
+  return (
+    <div 
+      className={`flex items-center justify-between py-2 hover:bg-gray-50 rounded-md px-2 cursor-pointer ${
+        isLoading ? 'opacity-50' : ''
+      }`} 
+      onClick={handleClick}
+    >
+      <div>
+        <p className="font-medium">{name}</p>
+        <p className="text-sm text-gray-500">{industry}</p>
       </div>
-      <span className="text-xs text-gray-500">{date}</span>
+      <div className="flex items-center">
+        <div className={`h-8 w-8 rounded-full flex items-center justify-center mr-3 ${
+          score >= 80 ? 'bg-green-100 text-green-600' :
+          score >= 60 ? 'bg-yellow-100 text-yellow-600' :
+          'bg-red-100 text-red-600'
+        }`}>
+          <span className="text-xs font-bold">{score}%</span>
+        </div>
+        <span className="text-xs text-gray-500">{date}</span>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default Dashboard;
