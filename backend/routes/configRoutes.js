@@ -25,6 +25,72 @@ router.put('/model', async (req, res) => {
   }
 });
 
+router.get('/api', async (req, res) => {
+  try {
+    const db = await require('../services/mongoDbService').getDb();
+    const config = await db.collection('configuration').findOne({ _id: 'api' });
+    
+    // Return config without exposing the full API key
+    const safeConfig = config ? {
+      key: config.key ? `${config.key.substring(0, 7)}...${config.key.slice(-4)}` : '',
+      maxUsage: config.maxUsage || 100,
+      alertThreshold: config.alertThreshold || 80,
+      configured: !!config.key
+    } : {
+      key: '',
+      maxUsage: 100,
+      alertThreshold: 80,
+      configured: false
+    };
+    
+    res.json({ success: true, data: safeConfig });
+  } catch (error) {
+    console.error('Error getting API config:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.put('/api', async (req, res) => {
+  try {
+    const { key, maxUsage, alertThreshold } = req.body;
+    const db = await require('../services/mongoDbService').getDb();
+    
+    // Prepare update object
+    const updateData = {
+      _id: 'api',
+      maxUsage: parseInt(maxUsage) || 100,
+      alertThreshold: parseInt(alertThreshold) || 80,
+      updatedAt: new Date()
+    };
+    
+    // Only update the key if a new one is provided (not masked)
+    if (key && !key.includes('...')) {
+      updateData.key = key;
+      
+      // Also update the environment variable for immediate effect
+      process.env.OPENAI_API_KEY = key;
+    }
+    
+    await db.collection('configuration').replaceOne(
+      { _id: 'api' },
+      updateData,
+      { upsert: true }
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'API configuration updated successfully',
+      data: {
+        ...updateData,
+        key: updateData.key ? `${updateData.key.substring(0, 7)}...${updateData.key.slice(-4)}` : undefined
+      }
+    });
+  } catch (error) {
+    console.error('Error updating API config:', error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 // Template Routes
 router.get('/templates', async (req, res) => {
   try {
