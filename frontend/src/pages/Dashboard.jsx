@@ -7,6 +7,10 @@ import { analyzeTranscript, getAnalysisHistory } from '../api/analysisApi';
 import { listDocs, getDocContent } from '../api/docsApi';
 import { listSheets, getSheetData } from '../api/sheetsApi';
 import FileUpload from '../components/common/FileUpload';
+import { getAnalysisHistory } from '../api/analysisApi';
+import { listDocs, getDocContent } from '../api/docsApi';
+import { getTemplates } from '../api/configApi';
+import { getDashboardMetrics } from '../api/dashboardApi';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -65,33 +69,31 @@ const Dashboard = () => {
   };
 
   // Load templates
-  const loadTemplates = async () => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/templates`);
-      const result = await response.json();
-      if (result.success) {
-        setTemplates(result.data);
-      }
-    } catch (error) {
-      console.error('Error loading templates:', error);
+const loadTemplates = async () => {
+  try {
+    const result = await getTemplates();
+    if (result.success) {
+      setTemplates(result.data);
     }
-  };
+  } catch (error) {
+    console.error('Error loading templates:', error);
+  }
+};
 
   // Load dashboard metrics
-  const loadDashboardMetrics = async () => {
-    try {
-      setIsLoadingMetrics(true);
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/dashboard/metrics`);
-      const result = await response.json();
-      if (result.success) {
-        setDashboardMetrics(result.data);
-      }
-    } catch (error) {
-      console.error('Error loading dashboard metrics:', error);
-    } finally {
-      setIsLoadingMetrics(false);
+const loadDashboardMetrics = async () => {
+  try {
+    setIsLoadingMetrics(true);
+    const result = await getDashboardMetrics();
+    if (result.success) {
+      setDashboardMetrics(result.data);
     }
-  };
+  } catch (error) {
+    console.error('Error loading dashboard metrics:', error);
+  } finally {
+    setIsLoadingMetrics(false);
+  }
+};
 
   // Handle uploading a transcript
   const handleUpload = () => {
@@ -103,17 +105,17 @@ const Dashboard = () => {
   };
 
   // Load Google Docs list
-  const loadGoogleDocs = async () => {
-    try {
-      setIsLoadingDocs(true);
-      const response = await listDocs();
-      setGoogleDocs(response.files || []);
-      setIsLoadingDocs(false);
-    } catch (error) {
-      console.error('Error loading Google Docs:', error);
-      setIsLoadingDocs(false);
-    }
-  };
+const loadGoogleDocs = async () => {
+  try {
+    setIsLoadingDocs(true);
+    const response = await listDocs();
+    setGoogleDocs(response.files || response || []); // Handle both response formats
+    setIsLoadingDocs(false);
+  } catch (error) {
+    console.error('Error loading Google Docs:', error);
+    setIsLoadingDocs(false);
+  }
+};
 
   // Load Google Doc content
   const handleDocSelect = async (e) => {
