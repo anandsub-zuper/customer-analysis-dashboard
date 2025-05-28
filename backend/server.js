@@ -3,9 +3,8 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { google } = require('googleapis');
 const { JWT } = require('google-auth-library');
-const { connect, close } = require('./services/mongoDbService');
+const { connect, close, getDb } = require('./services/mongoDbService');
 const configRoutes = require('./routes/configRoutes');
-
 
 // Load environment variables
 dotenv.config();
@@ -87,6 +86,130 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// Test connections endpoint
+app.get('/api/test-connections', async (req, res) => {
+  const results = {
+    timestamp: new Date().toISOString(),
+    connections: {}
+  };
+  
+  // Test MongoDB
+  try {
+    const db = await getDb();
+    if (db) {
+      await db.admin().ping();
+      results.connections.mongodb = {
+        status: 'connected',
+        message: 'MongoDB Atlas connection successful',
+        database: db.databaseName
+      };
+    } else {
+      results.connections.mongodb = {
+        status: 'error',
+        message: 'MongoDB connection not initialized'
+      };
+    }
+  } catch (error) {
+    results.connections.mongodb = {
+      status: 'error',
+      message: `MongoDB error: ${error.message}`
+    };
+  }
+  
+  // Test Google Sheets
+  try {
+    const { sheets } = require('./services/googleSheetsService');
+    if (sheets) {
+      // Try to get spreadsheet info
+      const spreadsheetId = process.env.HISTORICAL_DATA_SPREADSHEET_ID;
+      if (spreadsheetId) {
+        const info = await sheets.spreadsheets.get({
+          spreadsheetId: spreadsheetId
+        });
+        results.connections.googleSheets = {
+          status: 'connected',
+          message: 'Google Sheets API connected',
+          spreadsheetTitle: info.data.properties.title
+        };
+      } else {
+        results.connections.googleSheets = {
+          status: 'error',
+          message: 'HISTORICAL_DATA_SPREADSHEET_ID not configured'
+        };
+      }
+    } else {
+      results.connections.googleSheets = {
+        status: 'error',
+        message: 'Google Sheets service not initialized'
+      };
+    }
+  } catch (error) {
+    results.connections.googleSheets = {
+      status: 'error',
+      message: `Google Sheets error: ${error.message}`
+    };
+  }
+  
+  // Test Google Docs
+  try {
+    const { docs } = require('./services/googleDocsService');
+    if (docs) {
+      // Just check if the service is initialized
+      results.connections.googleDocs = {
+        status: 'connected',
+        message: 'Google Docs API ready'
+      };
+    } else {
+      results.connections.googleDocs = {
+        status: 'error',
+        message: 'Google Docs service not initialized'
+      };
+    }
+  } catch (error) {
+    results.connections.googleDocs = {
+      status: 'error',
+      message: `Google Docs error: ${error.message}`
+    };
+  }
+  
+  // Test OpenAI
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (apiKey) {
+      results.connections.openai = {
+        status: 'configured',
+        message: 'OpenAI API key configured',
+        keyPrefix: apiKey.substring(0, 7) + '...'
+      };
+    } else {
+      results.connections.openai = {
+        status: 'error',
+        message: 'OPENAI_API_KEY not configured'
+      };
+    }
+  } catch (error) {
+    results.connections.openai = {
+      status: 'error',
+      message: `OpenAI configuration error: ${error.message}`
+    };
+  }
+  
+  // Overall status
+  const allConnected = Object.values(results.connections).every(
+    conn => conn.status === 'connected' || conn.status === 'configured'
+  );
+  
+  results.overall = {
+    status: allConnected ? 'healthy' : 'degraded',
+    message: allConnected ? 'All services connected' : 'Some services have issues'
+  };
+  
+  res.json({
+    success: true,
+    data: results
+  });
+});
+
 // Root route
 app.get('/', (req, res) => {
   res.json({
@@ -162,4 +285,4 @@ process.on('unhandledRejection', async (reason, promise) => {
 });
 
 // Initialize and start the server
-initializeServer();
+initializeServer();  
