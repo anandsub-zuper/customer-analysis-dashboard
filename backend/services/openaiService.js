@@ -49,12 +49,35 @@ const openaiService = {
  */
 async function callOpenAI(prompt) {
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
+    // First check MongoDB for API key
+    let apiKey = process.env.OPENAI_API_KEY;
+    let model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
+    let temperature = 0.5;
+    let maxTokens = 2500;
+    
+    try {
+      const db = await require('./mongoDbService').getDb();
+      
+      // Get API configuration
+      const apiConfig = await db.collection('configuration').findOne({ _id: 'api' });
+      if (apiConfig && apiConfig.key) {
+        apiKey = apiConfig.key;
+      }
+      
+      // Get model configuration
+      const modelConfig = await db.collection('configuration').findOne({ _id: 'model' });
+      if (modelConfig) {
+        model = modelConfig.type || model;
+        temperature = modelConfig.temperature || temperature;
+        maxTokens = modelConfig.maxTokens || maxTokens;
+      }
+    } catch (dbError) {
+      console.log('Using environment variables for OpenAI config:', dbError.message);
+    }
+    
     if (!apiKey) {
       throw new Error('OpenAI API key is not configured.');
     }
-    
-    const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
     
     const response = await axios.post(
       'https://api.openai.com/v1/chat/completions',
@@ -66,8 +89,8 @@ async function callOpenAI(prompt) {
             content: prompt
           }
         ],
-        temperature: 0.5,
-        max_tokens: 2500
+        temperature: temperature,
+        max_tokens: maxTokens
       },
       {
         headers: {
@@ -86,6 +109,7 @@ async function callOpenAI(prompt) {
     throw new Error(`OpenAI API error: ${error.message}`);
   }
 }
+
 
 /**
  * Create the RAG-enhanced prompt with historical data
