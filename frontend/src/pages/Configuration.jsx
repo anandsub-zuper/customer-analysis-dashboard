@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Settings, Database, Key, Link } from 'lucide-react';
+import { Settings, Database, Key, Link, Check, X } from 'lucide-react';
 import ModelSettings from '../components/ModelSettings';
 import CriteriaManagement from '../components/CriteriaManagement';
 import Button from '../components/common/Button';
 
 const Configuration = () => {
   const [activeTab, setActiveTab] = useState('model');
+  const [testing, setTesting] = useState(false);
+  const [testResults, setTestResults] = useState({});
   
   const tabs = [
     { id: 'model', label: 'Model Settings', icon: <Settings className="h-4 w-4" /> },
@@ -13,6 +15,101 @@ const Configuration = () => {
     { id: 'api', label: 'API Settings', icon: <Key className="h-4 w-4" /> },
     { id: 'integrations', label: 'Integrations', icon: <Link className="h-4 w-4" /> }
   ];
+  
+  const testAllConnections = async () => {
+    setTesting(true);
+    setTestResults({});
+    
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    
+    try {
+      // First try the comprehensive test endpoint
+      const testResponse = await fetch(`${apiUrl}/api/test-connections`);
+      
+      if (testResponse.ok) {
+        const testData = await testResponse.json();
+        
+        if (testData.success && testData.data && testData.data.connections) {
+          // Use the comprehensive test results
+          const results = {};
+          
+          if (testData.data.connections.googleSheets) {
+            results.sheets = {
+              success: testData.data.connections.googleSheets.status === 'connected',
+              message: testData.data.connections.googleSheets.message
+            };
+          }
+          
+          if (testData.data.connections.googleDocs) {
+            results.docs = {
+              success: testData.data.connections.googleDocs.status === 'connected',
+              message: testData.data.connections.googleDocs.message
+            };
+          }
+          
+          if (testData.data.connections.mongodb) {
+            results.mongodb = {
+              success: testData.data.connections.mongodb.status === 'connected',
+              message: testData.data.connections.mongodb.message
+            };
+          }
+          
+          setTestResults(results);
+          return;
+        }
+      }
+      
+      // Fallback to individual endpoint testing if comprehensive test fails
+      const results = {};
+      
+      // Test Google Sheets connection
+      try {
+        const sheetsResponse = await fetch(`${apiUrl}/api/sheets/list`);
+        const sheetsData = await sheetsResponse.json();
+        results.sheets = {
+          success: sheetsResponse.ok && sheetsData.success !== false,
+          message: sheetsData.message || (sheetsResponse.ok ? 'Connected' : 'Connection failed')
+        };
+      } catch (error) {
+        results.sheets = { success: false, message: `Error: ${error.message}` };
+      }
+      
+      // Test Google Docs connection
+      try {
+        const docsResponse = await fetch(`${apiUrl}/api/docs/list`);
+        const docsData = await docsResponse.json();
+        results.docs = {
+          success: docsResponse.ok && docsData.success !== false,
+          message: docsData.message || (docsResponse.ok ? 'Connected' : 'Connection failed')
+        };
+      } catch (error) {
+        results.docs = { success: false, message: `Error: ${error.message}` };
+      }
+      
+      // Test MongoDB connection
+      try {
+        const dbResponse = await fetch(`${apiUrl}/health`);
+        const dbData = await dbResponse.json();
+        results.mongodb = {
+          success: dbResponse.ok && dbData.status === 'OK',
+          message: dbData.status || 'Connection failed'
+        };
+      } catch (error) {
+        results.mongodb = { success: false, message: `Error: ${error.message}` };
+      }
+      
+      setTestResults(results);
+    } catch (error) {
+      console.error('Error testing connections:', error);
+      setTestResults({
+        sheets: { success: false, message: 'Network error' },
+        docs: { success: false, message: 'Network error' },
+        mongodb: { success: false, message: 'Network error' }
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
   
   const renderAPISettings = () => (
     <div className="bg-white rounded-lg shadow p-6">
@@ -127,7 +224,13 @@ const Configuration = () => {
                 <p className="text-sm text-gray-500">Historical customer data</p>
               </div>
             </div>
-            <span className="text-sm text-green-600 font-medium">Connected</span>
+            <span className={`text-sm font-medium ${
+              testResults.sheets 
+                ? (testResults.sheets.success ? 'text-green-600' : 'text-red-600')
+                : 'text-green-600'
+            }`}>
+              {testResults.sheets ? testResults.sheets.message : 'Connected'}
+            </span>
           </div>
           <div className="bg-gray-50 rounded p-3 text-sm">
             <p className="text-gray-600 mb-1">Spreadsheet ID:</p>
@@ -146,7 +249,13 @@ const Configuration = () => {
                 <p className="text-sm text-gray-500">Meeting transcripts</p>
               </div>
             </div>
-            <span className="text-sm text-green-600 font-medium">Connected</span>
+            <span className={`text-sm font-medium ${
+              testResults.docs 
+                ? (testResults.docs.success ? 'text-green-600' : 'text-red-600')
+                : 'text-green-600'
+            }`}>
+              {testResults.docs ? testResults.docs.message : 'Connected'}
+            </span>
           </div>
           <div className="bg-gray-50 rounded p-3 text-sm">
             <p className="text-gray-600 mb-1">Analysis Folder:</p>
@@ -165,7 +274,13 @@ const Configuration = () => {
                 <p className="text-sm text-gray-500">Analysis storage</p>
               </div>
             </div>
-            <span className="text-sm text-green-600 font-medium">Connected</span>
+            <span className={`text-sm font-medium ${
+              testResults.mongodb 
+                ? (testResults.mongodb.success ? 'text-green-600' : 'text-red-600')
+                : 'text-green-600'
+            }`}>
+              {testResults.mongodb ? testResults.mongodb.message : 'Connected'}
+            </span>
           </div>
           <div className="bg-gray-50 rounded p-3 text-sm">
             <p className="text-gray-600 mb-1">Database:</p>
@@ -175,10 +290,36 @@ const Configuration = () => {
       </div>
       
       <div className="mt-6">
-        <Button variant="outline" fullWidth>
-          Test All Connections
+        <Button 
+          variant="outline" 
+          fullWidth
+          onClick={testAllConnections}
+          disabled={testing}
+        >
+          {testing ? 'Testing Connections...' : 'Test All Connections'}
         </Button>
       </div>
+      
+      {Object.keys(testResults).length > 0 && (
+        <div className="mt-4 p-4 bg-gray-50 rounded-md">
+          <h4 className="text-sm font-medium mb-2">Test Results:</h4>
+          <div className="space-y-1">
+            {Object.entries(testResults).map(([service, result]) => (
+              <div key={service} className="flex items-center text-sm">
+                {result.success ? (
+                  <Check className="h-4 w-4 text-green-600 mr-2" />
+                ) : (
+                  <X className="h-4 w-4 text-red-600 mr-2" />
+                )}
+                <span className="capitalize">{service}:</span>
+                <span className={`ml-2 ${result.success ? 'text-green-600' : 'text-red-600'}`}>
+                  {result.message}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
   
