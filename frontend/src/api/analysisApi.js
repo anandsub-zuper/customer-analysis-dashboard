@@ -8,13 +8,15 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
  * Analyze a meeting transcript with enhanced RAG capabilities
  * @param {string} transcriptText - The transcript text to analyze (optional if documentId is provided)
  * @param {string} documentId - Google Doc ID to analyze (optional if transcriptText is provided)
+ * @param {string} templateId - Template ID to use for analysis (optional)
  * @returns {Promise<Object>} - Analysis results
  */
-export const analyzeTranscript = async (transcriptText, documentId = null) => {
+export const analyzeTranscript = async (transcriptText, documentId = null, templateId = null) => {
   try {
-    const response = await axios.post(`${API_URL}/analysis/transcript`, {
+    const response = await axios.post(`${API_URL}/api/analysis/transcript`, {
       transcript: transcriptText,
-      documentId
+      documentId,
+      templateId
     });
     
     if (!response.data.success) {
@@ -31,11 +33,11 @@ export const analyzeTranscript = async (transcriptText, documentId = null) => {
 /**
  * Get analysis history
  * @param {number} limit - Number of items to return (default: 10)
- * @returns {Promise<Array>} - Array of analysis history items
+ * @returns {Promise<Object>} - Analysis history data
  */
 export const getAnalysisHistory = async (limit = 10) => {
   try {
-    const response = await axios.get(`${API_URL}/analysis/history`, {
+    const response = await axios.get(`${API_URL}/api/analysis/history`, {
       params: { limit }
     });
     
@@ -57,7 +59,7 @@ export const getAnalysisHistory = async (limit = 10) => {
  */
 export const getAnalysis = async (analysisId) => {
   try {
-    const response = await axios.get(`${API_URL}/analysis/${analysisId}`);
+    const response = await axios.get(`${API_URL}/api/analysis/${analysisId}`);
     
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to retrieve analysis');
@@ -77,7 +79,7 @@ export const getAnalysis = async (analysisId) => {
  */
 export const exportAnalysisAsPdf = async (analysisId) => {
   try {
-    const response = await axios.get(`${API_URL}/analysis/${analysisId}/export`, {
+    const response = await axios.get(`${API_URL}/api/analysis/${analysisId}/export`, {
       responseType: 'blob'
     });
     
@@ -95,7 +97,7 @@ export const exportAnalysisAsPdf = async (analysisId) => {
  */
 export const deleteAnalysis = async (analysisId) => {
   try {
-    const response = await axios.delete(`${API_URL}/analysis/${analysisId}`);
+    const response = await axios.delete(`${API_URL}/api/analysis/${analysisId}`);
     
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to delete analysis');
