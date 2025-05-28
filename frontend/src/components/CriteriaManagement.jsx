@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Plus, X, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { 
+  getAllCriteria, 
+  updateIndustryCriteria, 
+  updateRequirementsCriteria 
+} from '../api/configApi';
+
 
 const CriteriaManagement = () => {
   const [criteria, setCriteria] = useState({
@@ -21,59 +27,45 @@ const CriteriaManagement = () => {
     loadCriteria();
   }, []);
 
-  const loadCriteria = async () => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/criteria`);
-      const result = await response.json();
-      
-      if (result.success) {
-        setCriteria(result.data);
-      }
-    } catch (error) {
-      console.error('Error loading criteria:', error);
-      setMessage('Error loading criteria');
-    } finally {
-      setLoading(false);
+const loadCriteria = async () => {
+  try {
+    const result = await getAllCriteria();
+    
+    if (result.success) {
+      setCriteria(result.data);
     }
-  };
+  } catch (error) {
+    console.error('Error loading criteria:', error);
+    setMessage('Error loading criteria');
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const saveCriteria = async () => {
-    try {
-      setSaving(true);
-      setMessage('');
+const saveCriteria = async () => {
+  try {
+    setSaving(true);
+    setMessage('');
 
-      // Save industries and requirements separately
-      const [industriesResponse, requirementsResponse] = await Promise.all([
-        fetch('/api/config/criteria/industries', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(criteria.industries),
-        }),
-        fetch('/api/config/criteria/requirements', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(criteria.requirements),
-        })
-      ]);
+    // Save industries and requirements separately using the API
+    const [industriesResult, requirementsResult] = await Promise.all([
+      updateIndustryCriteria(criteria.industries),
+      updateRequirementsCriteria(criteria.requirements)
+    ]);
 
-      const [industriesResult, requirementsResult] = await Promise.all([
-        industriesResponse.json(),
-        requirementsResponse.json()
-      ]);
-
-      if (industriesResult.success && requirementsResult.success) {
-        setMessage('Criteria saved successfully');
-        setTimeout(() => setMessage(''), 3000);
-      } else {
-        setMessage('Error saving criteria');
-      }
-    } catch (error) {
-      console.error('Error saving criteria:', error);
+    if (industriesResult.success && requirementsResult.success) {
+      setMessage('Criteria saved successfully');
+      setTimeout(() => setMessage(''), 3000);
+    } else {
       setMessage('Error saving criteria');
-    } finally {
-      setSaving(false);
     }
-  };
+  } catch (error) {
+    console.error('Error saving criteria:', error);
+    setMessage('Error saving criteria');
+  } finally {
+    setSaving(false);
+  }
+};
 
   const addItem = (category, subcategory) => {
     const value = newInputs[subcategory].trim();
