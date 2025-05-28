@@ -10,19 +10,7 @@ const api = axios.create({
   },
 });
 
-// Add auth token to requests if available
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      config.headers['x-auth-token'] = token;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+// No auth interceptor needed since there's no frontend-backend auth
 
 /**
  * List available Google Docs
@@ -32,7 +20,7 @@ api.interceptors.request.use(
 export const listDocs = async (folderId = null) => {
   try {
     const params = folderId ? { folderId } : {};
-    const response = await api.get('/docs/list', { params });
+    const response = await api.get('/api/docs/list', { params });
     
     if (response.data && response.data.success === false) {
       throw new Error(response.data.message || 'Failed to list documents');
@@ -52,7 +40,7 @@ export const listDocs = async (folderId = null) => {
  */
 export const getDocContent = async (documentId) => {
   try {
-    const response = await api.get(`/docs/${documentId}`);
+    const response = await api.get(`/api/docs/${documentId}`);
     
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to retrieve document content');
@@ -71,7 +59,7 @@ export const getDocContent = async (documentId) => {
  */
 export const listAnalysisDocuments = async () => {
   try {
-    const response = await api.get('/docs/analysis-folder');
+    const response = await api.get('/api/docs/analysis-folder');
     
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to list analysis documents');
@@ -91,7 +79,7 @@ export const listAnalysisDocuments = async () => {
  */
 export const extractCustomerData = async (documentId) => {
   try {
-    const response = await api.post('/docs/extract', { documentId });
+    const response = await api.post('/api/docs/extract', { documentId });
     
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to extract customer data');
@@ -117,7 +105,7 @@ export const searchDocuments = async (query, folderId = null) => {
       params.folderId = folderId;
     }
     
-    const response = await api.get('/docs/search', { params });
+    const response = await api.get('/api/docs/search', { params });
     
     if (!response.data.success) {
       throw new Error(response.data.message || 'Failed to search documents');
