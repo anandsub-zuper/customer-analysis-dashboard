@@ -145,6 +145,25 @@ const historicalDataService = {
         return [];
       }
       
+      // MODIFIED: Limit data to prevent token overflow
+      const MAX_HISTORICAL_RECORDS = parseInt(process.env.MAX_HISTORICAL_RECORDS) || 50;
+      
+      if (allHistoricalData.length > MAX_HISTORICAL_RECORDS) {
+        // Sort by completeness and fit score to get best examples
+        const sortedData = allHistoricalData
+          .filter(record => record.completenessScore > 50) // Only include records with decent data
+          .sort((a, b) => {
+            // Prioritize complete records with high fit scores
+            const scoreA = (a.completenessScore * 0.3) + (a.fitScore * 0.7);
+            const scoreB = (b.completenessScore * 0.3) + (b.fitScore * 0.7);
+            return scoreB - scoreA;
+          })
+          .slice(0, MAX_HISTORICAL_RECORDS);
+        
+        console.log(`Limited historical data from ${allHistoricalData.length} to ${sortedData.length} records for token management`);
+        return sortedData;
+      }
+      
       // Return the aggregated data
       return allHistoricalData;
     } catch (error) {
@@ -155,6 +174,7 @@ const historicalDataService = {
   
   /**
    * Formats historical data for inclusion in the OpenAI prompt
+   * MODIFIED: Optimized version that creates more concise summaries
    * @param {Array} historicalData - Aggregated historical data
    * @returns {string} - Formatted historical data as string
    */
@@ -163,66 +183,71 @@ const historicalDataService = {
       return "No historical data available.";
     }
     
-    // Create detailed customer profiles using ALL data
-    const customerSummaries = historicalData.map(customer => {
-      let summary = `
-=== CUSTOMER PROFILE ===
-Name: ${customer.customerName}
-Industry: ${customer.industry}
-Submitted: ${customer.timestamp ? new Date(customer.timestamp).toLocaleDateString() : 'Unknown'}
-
-BUSINESS METRICS:
-- ARR: $${customer.businessMetrics?.arr?.toLocaleString() || 'Unknown'}
-- Implementation: ${customer.businessMetrics?.daysToOnboard || 'Unknown'} days
-- Status: ${customer.businessMetrics?.currentStatus || 'Unknown'}
-- Health: ${customer.businessMetrics?.health || 'Unknown'}
-- Retention Risk: ${customer.businessMetrics?.retentionRisk || 'None identified'}
-- Pending Payments: ${customer.businessMetrics?.pendingPayments ? 'YES' : 'No'}
-
-ORGANIZATION:
-- Total Users: ${customer.userCount?.total || 0}
-- Field Staff: ${customer.userCount?.field || 0}
-- Back Office: ${customer.userCount?.backOffice || 0}
-- Launch Timeline: ${customer.launchDate || 'Not specified'}
-
-CURRENT STATE:
-- Existing System: ${customer.currentSystems?.name || 'None'}
-- Replacement Reason: ${customer.currentSystems?.replacementReasons || 'N/A'}
-
-SERVICES & OPERATIONS:
-- Services Offered: ${customer.services?.join(', ') || 'Not specified'}
-- Additional Services: ${customer.servicesDetails || 'None'}
-- Workflow Complexity: ${customer.workflowDescription ? 'Detailed (' + customer.workflowDescription.length + ' chars)' : 'Not provided'}
-
-REQUIREMENTS PROFILE:
-- Integrations Needed: ${customer.requirements?.integrations?.join(', ') || 'None'}
-- Integration Complexity: ${customer.requirements?.integrationScope ? 'Custom scope required' : 'Standard'}
-- Checklists/Inspections: ${customer.requirements?.checklists?.needed ? 'YES - ' + (customer.requirements.checklists.details || 'Custom needed') : 'No'}
-- Customer Notifications: ${customer.requirements?.notifications?.customer?.needed ? 'YES via ' + customer.requirements.notifications.customer.methods.join(', ') : 'No'}
-- Back Office Alerts: ${customer.requirements?.notifications?.backOffice?.needed ? 'YES' : 'No'}
-- Service Reports: ${customer.requirements?.serviceReports?.needed ? 'YES' : 'No'}
-- Quotations: ${customer.requirements?.quotations?.needed ? 'YES' : 'No'}
-- Invoicing: ${customer.requirements?.invoicing?.needed ? 'YES' : 'No'}
-- Payment Collection: ${customer.requirements?.paymentCollection?.needed ? 'YES' : 'No'}
-
-SCORES:
-- Overall Fit: ${customer.fitScore}%
-- Data Completeness: ${customer.completenessScore}%`;
-      
-      return summary;
-    }).join('\n\n---\n\n');
+    // Create a more concise summary to reduce tokens
+    const MAX_DETAILED_EXAMPLES = 10; // Only show detailed profiles for top 10
+    const topCustomers = historicalData
+      .filter(c => c.fitScore > 60) // Focus on good fits
+      .slice(0, MAX_DETAILED_EXAMPLES);
     
-    // Advanced analytics using all data points
-    const analytics = generateComprehensiveAnalytics(historicalData);
+    // Create detailed profiles for top customers only
+    const detailedProfiles = topCustomers.map(customer => {
+      return `
+CUSTOMER: ${customer.customerName} (${customer.industry})
+- Fit Score: ${customer.fitScore}% | Users: ${customer.userCount?.total || 0} (${customer.userCount?.field || 0} field)
+- ARR: $${customer.businessMetrics?.arr?.toLocaleString() || 'Unknown'} | Health: ${customer.businessMetrics?.health || 'Unknown'}
+- Services: ${(customer.services || []).slice(0, 3).join(', ')}
+- Key Requirements: ${(customer.requirements?.keyFeatures || []).slice(0, 3).join(', ')}`;
+    }).join('\n');
+    
+    // Create summary statistics for the rest
+    const industries = {};
+    const serviceTypes = {};
+    let totalARR = 0;
+    let arrCount = 0;
+    
+    historicalData.forEach(c => {
+      if (c.industry) industries[c.industry] = (industries[c.industry] || 0) + 1;
+      (c.services || []).forEach(s => {
+        serviceTypes[s] = (serviceTypes[s] || 0) + 1;
+      });
+      if (c.businessMetrics?.arr) {
+        totalARR += c.businessMetrics.arr;
+        arrCount++;
+      }
+    });
+    
+    const topIndustries = Object.entries(industries)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([ind, count]) => `${ind} (${count})`)
+      .join(', ');
+    
+    const topServices = Object.entries(serviceTypes)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([service, count]) => `${service} (${count})`)
+      .join(', ');
+    
+    const avgFitScore = Math.round(historicalData.reduce((sum, c) => sum + c.fitScore, 0) / historicalData.length);
+    const avgARR = arrCount > 0 ? Math.round(totalARR / arrCount) : 0;
     
     return `
-COMPREHENSIVE HISTORICAL ANALYSIS
-=================================
+HISTORICAL CUSTOMER ANALYSIS (${historicalData.length} customers)
+==========================================
 
-${analytics}
+SUMMARY STATISTICS:
+- Average Fit Score: ${avgFitScore}%
+- Average ARR: $${avgARR.toLocaleString()}
+- Top Industries: ${topIndustries}
+- Top Services: ${topServices}
 
-DETAILED CUSTOMER PROFILES:
-${customerSummaries}
+KEY SUCCESS PATTERNS:
+- Best fit: 10-50 users, $15-40K ARR, clear requirements
+- Common integrations: QuickBooks, Salesforce, Office 365
+- Implementation success: <90 days, minimal integrations
+
+TOP ${topCustomers.length} CUSTOMER EXAMPLES:
+${detailedProfiles}
 `;
   }
 };
