@@ -111,12 +111,84 @@ const Configuration = () => {
     }
   };
   
-  const renderAPISettings = () => (
+const renderAPISettings = () => {
+  const [apiConfig, setApiConfig] = useState({
+    apiKey: '',
+    monthlyLimit: 100,
+    alertThreshold: 80
+  });
+  const [savingApi, setSavingApi] = useState(false);
+  const [apiMessage, setApiMessage] = useState('');
+  
+  // Load API config on component mount
+  useEffect(() => {
+    loadApiConfig();
+  }, []);
+  
+  const loadApiConfig = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/api`);
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        setApiConfig({
+          apiKey: result.data.key || '',
+          monthlyLimit: result.data.maxUsage || 100,
+          alertThreshold: result.data.alertThreshold || 80
+        });
+      }
+    } catch (error) {
+      console.error('Error loading API config:', error);
+    }
+  };
+  
+  const saveApiConfig = async () => {
+    try {
+      setSavingApi(true);
+      setApiMessage('');
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/api`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          key: apiConfig.apiKey,
+          maxUsage: apiConfig.monthlyLimit,
+          alertThreshold: apiConfig.alertThreshold
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setApiMessage('API settings saved successfully');
+        setTimeout(() => setApiMessage(''), 3000);
+      } else {
+        setApiMessage(`Error: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Error saving API config:', error);
+      setApiMessage('Error saving API settings');
+    } finally {
+      setSavingApi(false);
+    }
+  };
+  
+  return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold mb-6 flex items-center">
         <Key className="h-5 w-5 mr-2 text-purple-600" />
         API Configuration
       </h2>
+      
+      {apiMessage && (
+        <div className={`mb-4 p-3 rounded-md ${
+          apiMessage.includes('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
+        }`}>
+          {apiMessage}
+        </div>
+      )}
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
@@ -130,7 +202,8 @@ const Configuration = () => {
                 type="password"
                 className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
                 placeholder="sk-..."
-                defaultValue="sk-●●●●●●●●●●●●●●●●●●●●●●●●"
+                value={apiConfig.apiKey}
+                onChange={(e) => setApiConfig({ ...apiConfig, apiKey: e.target.value })}
               />
               <p className="text-xs text-gray-500 mt-1">
                 Your OpenAI API key for AI-powered analysis
@@ -139,23 +212,25 @@ const Configuration = () => {
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Monthly Usage Limit
+                Monthly Usage Limit ($)
               </label>
               <input
-                type="text"
+                type="number"
                 className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                defaultValue="$100"
+                value={apiConfig.monthlyLimit}
+                onChange={(e) => setApiConfig({ ...apiConfig, monthlyLimit: parseInt(e.target.value) })}
               />
             </div>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Alert Threshold
+                Alert Threshold (%)
               </label>
               <input
-                type="text"
+                type="number"
                 className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                defaultValue="80%"
+                value={apiConfig.alertThreshold}
+                onChange={(e) => setApiConfig({ ...apiConfig, alertThreshold: parseInt(e.target.value) })}
               />
               <p className="text-xs text-gray-500 mt-1">
                 Alert when usage reaches this percentage
@@ -194,17 +269,34 @@ const Configuration = () => {
               <div className="bg-blue-600 h-2 rounded-full" style={{ width: '42.5%' }}></div>
             </div>
           </div>
+          
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+            <h4 className="text-sm font-medium text-blue-800 mb-2">Model Configuration</h4>
+            <p className="text-sm text-blue-700">
+              To change the AI model (GPT-4/GPT-3.5), temperature, and other model settings, 
+              go to the <button 
+                onClick={() => setActiveTab('model')} 
+                className="underline font-medium"
+              >
+                Model Settings
+              </button> tab.
+            </p>
+          </div>
         </div>
       </div>
       
       <div className="mt-6 flex justify-end">
-        <Button variant="primary">
-          Save API Settings
+        <Button 
+          variant="primary"
+          onClick={saveApiConfig}
+          disabled={savingApi}
+        >
+          {savingApi ? 'Saving...' : 'Save API Settings'}
         </Button>
       </div>
     </div>
   );
-  
+};
   const renderIntegrations = () => (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold mb-6 flex items-center">
