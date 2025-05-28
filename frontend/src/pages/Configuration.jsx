@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, Database, Key, Link, Check, X } from 'lucide-react';
 import ModelSettings from '../components/ModelSettings';
 import CriteriaManagement from '../components/CriteriaManagement';
@@ -9,12 +9,78 @@ const Configuration = () => {
   const [testing, setTesting] = useState(false);
   const [testResults, setTestResults] = useState({});
   
+  // API Settings state - moved to top level
+  const [apiConfig, setApiConfig] = useState({
+    apiKey: '',
+    monthlyLimit: 100,
+    alertThreshold: 80
+  });
+  const [savingApi, setSavingApi] = useState(false);
+  const [apiMessage, setApiMessage] = useState('');
+  
   const tabs = [
     { id: 'model', label: 'Model Settings', icon: <Settings className="h-4 w-4" /> },
     { id: 'criteria', label: 'Analysis Criteria', icon: <Database className="h-4 w-4" /> },
     { id: 'api', label: 'API Settings', icon: <Key className="h-4 w-4" /> },
     { id: 'integrations', label: 'Integrations', icon: <Link className="h-4 w-4" /> }
   ];
+  
+  // Load API config when API tab is active
+  useEffect(() => {
+    if (activeTab === 'api') {
+      loadApiConfig();
+    }
+  }, [activeTab]);
+  
+  const loadApiConfig = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/api`);
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        setApiConfig({
+          apiKey: result.data.key || '',
+          monthlyLimit: result.data.maxUsage || 100,
+          alertThreshold: result.data.alertThreshold || 80
+        });
+      }
+    } catch (error) {
+      console.error('Error loading API config:', error);
+    }
+  };
+  
+  const saveApiConfig = async () => {
+    try {
+      setSavingApi(true);
+      setApiMessage('');
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/api`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          key: apiConfig.apiKey,
+          maxUsage: apiConfig.monthlyLimit,
+          alertThreshold: apiConfig.alertThreshold
+        }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setApiMessage('API settings saved successfully');
+        setTimeout(() => setApiMessage(''), 3000);
+      } else {
+        setApiMessage(`Error: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Error saving API config:', error);
+      setApiMessage('Error saving API settings');
+    } finally {
+      setSavingApi(false);
+    }
+  };
   
   const testAllConnections = async () => {
     setTesting(true);
@@ -111,71 +177,7 @@ const Configuration = () => {
     }
   };
   
-const renderAPISettings = () => {
-  const [apiConfig, setApiConfig] = useState({
-    apiKey: '',
-    monthlyLimit: 100,
-    alertThreshold: 80
-  });
-  const [savingApi, setSavingApi] = useState(false);
-  const [apiMessage, setApiMessage] = useState('');
-  
-  // Load API config on component mount
-  useEffect(() => {
-    loadApiConfig();
-  }, []);
-  
-  const loadApiConfig = async () => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/api`);
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        setApiConfig({
-          apiKey: result.data.key || '',
-          monthlyLimit: result.data.maxUsage || 100,
-          alertThreshold: result.data.alertThreshold || 80
-        });
-      }
-    } catch (error) {
-      console.error('Error loading API config:', error);
-    }
-  };
-  
-  const saveApiConfig = async () => {
-    try {
-      setSavingApi(true);
-      setApiMessage('');
-      
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/api/config/api`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          key: apiConfig.apiKey,
-          maxUsage: apiConfig.monthlyLimit,
-          alertThreshold: apiConfig.alertThreshold
-        }),
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        setApiMessage('API settings saved successfully');
-        setTimeout(() => setApiMessage(''), 3000);
-      } else {
-        setApiMessage(`Error: ${result.message}`);
-      }
-    } catch (error) {
-      console.error('Error saving API config:', error);
-      setApiMessage('Error saving API settings');
-    } finally {
-      setSavingApi(false);
-    }
-  };
-  
-  return (
+  const renderAPISettings = () => (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold mb-6 flex items-center">
         <Key className="h-5 w-5 mr-2 text-purple-600" />
@@ -296,7 +298,7 @@ const renderAPISettings = () => {
       </div>
     </div>
   );
-};
+  
   const renderIntegrations = () => (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-xl font-semibold mb-6 flex items-center">
