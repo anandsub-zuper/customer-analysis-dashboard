@@ -1,103 +1,69 @@
 // src/pages/Analysis.jsx
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Upload, FileText, Download, Calendar, Users, Building, 
-         Target, AlertCircle, CheckCircle, XCircle, TrendingUp, 
-         Package, FileCheck, DollarSign } from 'lucide-react';
+import { Download, Calendar, Users, Building, Target, AlertCircle, 
+         CheckCircle, XCircle, TrendingUp, Upload, Clock, ArrowLeft } from 'lucide-react';
 import Button from '../components/common/Button';
-import { analyzeTranscript } from '../api/analysisApi';
-import { listDocs, getDocContent } from '../api/docsApi';
+import { getAnalysisHistory, getAnalysis } from '../api/analysisApi';
 
 const Analysis = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('summary');
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Get analysis results from navigation state
+  // Get analysis results from navigation state or load most recent
   const [analysisResults, setAnalysisResults] = useState(location.state?.analysisResults || null);
   
-  // States for new analysis
-  const [showUploadForm, setShowUploadForm] = useState(false);
-  const [transcriptText, setTranscriptText] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [googleDocs, setGoogleDocs] = useState([]);
-  const [selectedDocId, setSelectedDocId] = useState('');
-  const [isLoadingDocs, setIsLoadingDocs] = useState(false);
-  
-  // Check if we should show upload form (no results)
+  // Load most recent analysis if none provided via navigation
   useEffect(() => {
-    if (!analysisResults) {
-      setShowUploadForm(true);
-    }
-  }, [analysisResults]);
-  
-  // Load Google Docs list
-  const loadGoogleDocs = async () => {
-    try {
-      setIsLoadingDocs(true);
-      const docs = await listDocs();
-      setGoogleDocs(docs);
-      setIsLoadingDocs(false);
-    } catch (error) {
-      console.error('Error loading Google Docs:', error);
-      setIsLoadingDocs(false);
-    }
-  };
-  
-  // Load Google Doc content
-  const loadGoogleDocContent = async (docId) => {
-    try {
-      setIsAnalyzing(true);
-      const docContent = await getDocContent(docId);
-      setTranscriptText(docContent.plainText);
-      setIsAnalyzing(false);
-    } catch (error) {
-      console.error('Error loading Google Doc content:', error);
-      setIsAnalyzing(false);
-    }
-  };
-  
-  // Handle document selection
-  const handleDocSelect = (e) => {
-    const docId = e.target.value;
-    setSelectedDocId(docId);
-    if (docId) {
-      loadGoogleDocContent(docId);
-    }
-  };
-  
-  // Run analysis on transcript
-  const handleAnalyzeTranscript = async () => {
-    if (!transcriptText.trim()) {
-      window.alert('Please enter a transcript or select a Google Doc');
-      return;
-    }
+    const loadAnalysis = async () => {
+      // If we already have results from navigation, don't load
+      if (analysisResults) {
+        setIsLoading(false);
+        return;
+      }
+      
+      try {
+        setIsLoading(true);
+        const history = await getAnalysisHistory(1);
+        
+        if (history.data && history.data.length > 0) {
+          const mostRecent = history.data[0];
+          
+          // If we have an ID, fetch full details
+          if (mostRecent.id || mostRecent._id) {
+            const analysisId = mostRecent.id || mostRecent._id;
+            const fullAnalysis = await getAnalysis(analysisId);
+            setAnalysisResults(fullAnalysis.data || fullAnalysis);
+          } else {
+            setAnalysisResults(mostRecent);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading analysis:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
     
-    try {
-      setIsAnalyzing(true);
-      const results = await analyzeTranscript(transcriptText, selectedDocId);
-      setAnalysisResults(results.results);
-      setShowUploadForm(false);
-      setIsAnalyzing(false);
-    } catch (error) {
-      console.error('Error analyzing transcript:', error);
-      setIsAnalyzing(false);
-      window.alert('Error analyzing transcript. Please try again.');
-    }
-  };
+    loadAnalysis();
+  }, []);
   
-  // Start new analysis
+  // Navigate to dashboard to start new analysis
   const handleNewAnalysis = () => {
-    setAnalysisResults(null);
-    setShowUploadForm(true);
-    setTranscriptText('');
-    setSelectedDocId('');
+    navigate('/dashboard?action=new-analysis');
   };
   
   // Export report
   const handleExportReport = () => {
     // TODO: Implement PDF export
     window.alert('Export feature coming soon!');
+  };
+  
+  // Navigate back to dashboard
+  const handleBackToDashboard = () => {
+    navigate('/dashboard');
   };
   
   // Helper functions
@@ -128,98 +94,53 @@ const Analysis = () => {
            value === 'Medium' || value === 'Moderate' ? colors.medium : colors.low;
   };
   
-  // If showing upload form
-  if (showUploadForm && !analysisResults) {
+  // Loading state
+  if (isLoading) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-6">Customer Analysis</h1>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold mb-4">Meeting Transcript</h2>
-            
-            <div className="mb-4">
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Paste transcript or select from Google Docs
-                </label>
-                
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={loadGoogleDocs}
-                  disabled={isLoadingDocs}
-                >
-                  <FileText className="h-4 w-4 mr-1" />
-                  {isLoadingDocs ? 'Loading...' : 'Load Google Docs'}
-                </Button>
-              </div>
-              
-              {googleDocs.length > 0 && (
-                <div className="mb-4">
-                  <select
-                    className="w-full p-2 border border-gray-300 rounded-md mb-4"
-                    value={selectedDocId}
-                    onChange={handleDocSelect}
-                  >
-                    <option value="">-- Select a Google Doc --</option>
-                    {googleDocs.map(doc => (
-                      <option key={doc.id} value={doc.id}>
-                        {doc.name} ({new Date(doc.modifiedTime).toLocaleDateString()})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              
-              <textarea 
-                className="w-full p-3 border border-gray-300 rounded-md h-64"
-                placeholder="Paste your meeting transcript here..."
-                value={transcriptText}
-                onChange={(e) => setTranscriptText(e.target.value)}
-              ></textarea>
-            </div>
-            
-            <div className="mb-6">
-              <div className="relative border-2 border-dashed border-gray-300 rounded-md p-6 flex flex-col items-center justify-center">
-                <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                <p className="text-sm text-gray-500">Drag and drop transcript file, or <span className="text-blue-600">browse</span></p>
-                <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" />
-              </div>
-            </div>
-            
-            <div className="flex justify-end">
-              <Button 
-                onClick={handleAnalyzeTranscript}
-                disabled={isAnalyzing || !transcriptText.trim()}
-              >
-                {isAnalyzing ? 'Analyzing...' : 'Analyze Transcript'}
-              </Button>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow p-6 flex items-center justify-center">
-            <div className="text-center text-gray-500">
-              <FileText className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-              <h3 className="text-lg font-medium mb-2">No Analysis Yet</h3>
-              <p>Upload or paste a transcript and click "Analyze Transcript" to see results</p>
-            </div>
-          </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600">Loading analysis...</p>
         </div>
       </div>
     );
   }
   
-  // Show analysis results
-  if (!analysisResults) return null;
+  // No analysis found state
+  if (!analysisResults) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center bg-white rounded-lg shadow-lg p-8 max-w-md">
+          <AlertCircle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">No Analysis Found</h2>
+          <p className="text-gray-600 mb-6">
+            You haven't created any analyses yet. Start by analyzing a meeting transcript.
+          </p>
+          <Button onClick={handleNewAnalysis}>
+            <Upload className="h-4 w-4 mr-2" />
+            Create New Analysis
+          </Button>
+        </div>
+      </div>
+    );
+  }
   
+  // Main analysis display
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="px-6 py-4">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold">Customer Fit Analysis</h1>
+            <div className="flex items-center">
+              <button
+                onClick={handleBackToDashboard}
+                className="mr-4 p-2 text-gray-500 hover:text-gray-700 rounded-md hover:bg-gray-100"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <h1 className="text-2xl font-bold">Customer Fit Analysis</h1>
+            </div>
             <div className="flex gap-3">
               <Button variant="outline" onClick={handleExportReport}>
                 <Download className="h-4 w-4 mr-2" />
