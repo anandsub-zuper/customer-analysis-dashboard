@@ -1,8 +1,11 @@
+// frontend/src/pages/Dashboard.jsx - Updated handleAnalyzeTranscript with retry UI
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Bell, Settings, Users, Database, FileText, BarChart2, PieChart, Check, X, 
          AlertTriangle, Upload, Clock, Search, Home, Layers, ArrowRight, Clipboard, 
-         Sliders, HelpCircle, ChevronRight, Award, Download, Calendar, Briefcase } from 'lucide-react';
+         Sliders, HelpCircle, ChevronRight, Award, Download, Calendar, Briefcase,
+         RefreshCw } from 'lucide-react';
 import { analyzeTranscript, getAnalysisHistory, getAnalysis } from '../api/analysisApi';
 import { listDocs, getDocContent } from '../api/docsApi';
 import { listSheets, getSheetData } from '../api/sheetsApi';
@@ -21,6 +24,8 @@ const Dashboard = () => {
   const [selectedDocId, setSelectedDocId] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [analyzingTranscript, setAnalyzingTranscript] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState(''); // New state for status messages
+  const [retryCount, setRetryCount] = useState(0); // New state for retry count
   const [googleDocs, setGoogleDocs] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [isLoadingDocs, setIsLoadingDocs] = useState(false);
@@ -144,7 +149,7 @@ const Dashboard = () => {
     setTranscriptText(content);
   };
 
-  // Run analysis on transcript
+  // Run analysis on transcript with retry handling
   const handleAnalyzeTranscript = async () => {
     if (!transcriptText.trim() && !selectedDocId) {
       window.alert('Please enter a transcript or select a Google Doc');
@@ -153,11 +158,18 @@ const Dashboard = () => {
 
     try {
       setAnalyzingTranscript(true);
+      setAnalysisStatus('Starting analysis...');
+      setRetryCount(0);
 
       const response = await analyzeTranscript(
         transcriptText.trim() ? transcriptText : null,
         selectedDocId || null,
-        selectedTemplateId || null
+        selectedTemplateId || null,
+        // Retry callback to update UI
+        (attempt, maxAttempts) => {
+          setRetryCount(attempt);
+          setAnalysisStatus(`Analysis is taking longer than expected. Retrying... (Attempt ${attempt}/${maxAttempts})`);
+        }
       );
 
       if (response.success) {
@@ -175,71 +187,22 @@ const Dashboard = () => {
     } catch (error) {
       console.error('Error analyzing transcript:', error);
       setAnalyzingTranscript(false);
-      window.alert('Error analyzing transcript. Please try again.');
-    }
-  };
-
-  // Enhanced viewAnalysis function with full data loading
-  const viewAnalysis = async (analysis) => {
-    // If we have an analysis ID, fetch the full details
-    if (analysis.id || analysis._id) {
-      try {
-        const analysisId = analysis.id || analysis._id;
-        const fullAnalysis = await getAnalysis(analysisId);
-        
-        // Navigate with the full analysis data
-        navigate('/analysis', { 
-          state: { 
-            analysisResults: fullAnalysis.data || fullAnalysis 
-          } 
-        });
-      } catch (error) {
-        console.error('Error loading analysis details:', error);
-        // Fallback: navigate with whatever data we have
-        navigate('/analysis', { 
-          state: { 
-            analysisResults: analysis 
-          } 
-        });
+      
+      // Provide more specific error messages
+      let errorMessage = 'Error analyzing transcript. ';
+      if (error.message.includes('timeout')) {
+        errorMessage += 'The analysis is taking too long. This might be due to high server load. Please try again in a few moments.';
+      } else if (error.response?.status === 503) {
+        errorMessage += 'The server is temporarily unavailable. Please try again.';
+      } else {
+        errorMessage += error.message || 'Please try again.';
       }
-    } else {
-      // If no ID, just navigate with the data we have
-      navigate('/analysis', { 
-        state: { 
-          analysisResults: analysis 
-        } 
-      });
+      
+      window.alert(errorMessage);
     }
   };
 
-  // Helper functions
-  const calculateAverageFitScore = () => {
-    if (dashboardMetrics.averageFitScore) {
-      return `${Math.round(dashboardMetrics.averageFitScore)}%`;
-    }
-    
-    // Fallback to calculating from recent analyses if metrics not available
-    if (!recentAnalyses || recentAnalyses.length === 0) {
-      return "0%";
-    }
-
-    const sum = recentAnalyses.reduce((total, analysis) => total + (analysis.fitScore || 0), 0);
-    return `${Math.round(sum / recentAnalyses.length)}%`;
-  };
-
-  const getFitScoreColor = (score) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getFitScoreBackgroundColor = (score) => {
-    if (score >= 80) return 'bg-green-600';
-    if (score >= 60) return 'bg-yellow-600';
-    return 'bg-red-600';
-  };
-
-  // Render upload modal
+  // Render upload modal with enhanced analyzing state
   const renderUploadModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-lg w-full max-w-3xl p-6">
@@ -247,6 +210,7 @@ const Dashboard = () => {
 
         {!analyzingTranscript ? (
           <>
+            {/* ... (keep all the existing form fields) ... */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">Paste transcript or upload file</label>
               <textarea
@@ -338,15 +302,108 @@ const Dashboard = () => {
         ) : (
           <div className="flex flex-col items-center justify-center py-8">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mb-4"></div>
-            <p className="text-lg">Analyzing transcript...</p>
-            <p className="text-sm text-gray-500 mt-2">This might take a moment</p>
+            <p className="text-lg font-medium mb-2">{analysisStatus}</p>
+            <p className="text-sm text-gray-500 mb-4">This may take 30-60 seconds for comprehensive analysis</p>
+            
+            {retryCount > 0 && (
+              <div className="flex items-center text-sm text-orange-600 mb-4">
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                <span>Retry attempt {retryCount} - The analysis is still processing...</span>
+              </div>
+            )}
+            
+            <div className="bg-blue-50 rounded-lg p-4 max-w-md">
+              <p className="text-sm text-blue-800">
+                <strong>What's happening:</strong> Our AI is performing a comprehensive analysis including:
+              </p>
+              <ul className="text-sm text-blue-700 mt-2 space-y-1">
+                <li>• Extracting customer requirements</li>
+                <li>• Comparing with 50+ historical customers</li>
+                <li>• Calculating fit scores and recommendations</li>
+                <li>• Generating implementation strategies</li>
+              </ul>
+            </div>
+            
+            {retryCount >= 2 && (
+              <div className="mt-4">
+                <p className="text-sm text-gray-600 mb-2">Taking longer than expected?</p>
+                <button
+                  className="text-blue-600 text-sm underline"
+                  onClick={() => {
+                    setAnalyzingTranscript(false);
+                    setAnalysisStatus('');
+                    setRetryCount(0);
+                  }}
+                >
+                  Cancel and try again
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
   );
 
-  // Main dashboard render
+  // Enhanced viewAnalysis function with full data loading
+  const viewAnalysis = async (analysis) => {
+    // If we have an analysis ID, fetch the full details
+    if (analysis.id || analysis._id) {
+      try {
+        const analysisId = analysis.id || analysis._id;
+        const fullAnalysis = await getAnalysis(analysisId);
+        
+        // Navigate with the full analysis data
+        navigate('/analysis', { 
+          state: { 
+            analysisResults: fullAnalysis.data || fullAnalysis 
+          } 
+        });
+      } catch (error) {
+        console.error('Error loading analysis details:', error);
+        // Fallback: navigate with whatever data we have
+        navigate('/analysis', { 
+          state: { 
+            analysisResults: analysis 
+          } 
+        });
+      }
+    } else {
+      // If no ID, just navigate with the data we have
+      navigate('/analysis', { 
+        state: { 
+          analysisResults: analysis 
+        } 
+      });
+    }
+  };
+
+  // Helper functions
+  const calculateAverageFitScore = () => {
+    if (dashboardMetrics.averageFitScore) {
+      return `${Math.round(dashboardMetrics.averageFitScore)}%`;
+    }
+    
+    // Fallback to calculating from recent analyses if metrics not available
+    if (!recentAnalyses || recentAnalyses.length === 0) {
+      return "0%";
+    }
+
+    const sum = recentAnalyses.reduce((total, analysis) => total + (analysis.fitScore || 0), 0);
+    return `${Math.round(sum / recentAnalyses.length)}%`;
+  };
+
+  const getFitScoreColor = (score) => {
+    if (score >= 80) return 'text-green-600';
+    if (score >= 60) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const getFitScoreBackgroundColor = (score) => {
+    if (score >= 80) return 'bg-green-600';
+    if (score >= 60) return 'bg-yellow-600';
+    return 'bg-red-600';
+  };
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
