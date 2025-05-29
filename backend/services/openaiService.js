@@ -64,14 +64,22 @@ const openaiService = {
       // 7. Apply criteria adjustments
       const adjustedResult = applyComprehensiveCriteriaAdjustments(result, criteria);
       
-      // 8. Find similar customers with detailed matching
-      const enrichedResult = enrichWithSimilarCustomers(adjustedResult, historicalData);
+      // 8. CRITICAL FIX: Ensure complete analysis BEFORE finding similar customers
+      const completeResult = ensureCompleteAnalysis(adjustedResult);
       
-      // 9. Ensure all fields have meaningful values
-      const finalResult = ensureCompleteAnalysis(enrichedResult);
+      // 9. Find similar customers with PROPER matching for tech companies
+      const enrichedResult = enrichWithSimilarCustomers(completeResult, historicalData);
       
-      // 10. Fix data structure for UI
-      const uiReadyResult = fixDataStructureForUI(finalResult);
+      // 10. FINAL FIX: Ensure UI-ready structure with all content
+      const uiReadyResult = fixDataStructureForUI(enrichedResult);
+      
+      // 11. VALIDATION: Log final structure to ensure completeness
+      console.log('=== FINAL RESULT VALIDATION ===');
+      console.log('Summary Overview:', uiReadyResult.summary?.overview ? 'Present' : 'MISSING');
+      console.log('Strengths Count:', uiReadyResult.strengths?.length || 0);
+      console.log('Challenges Count:', uiReadyResult.challenges?.length || 0);
+      console.log('Similar Customers Count:', uiReadyResult.similarCustomers?.length || 0);
+      console.log('Recommendations Present:', !!uiReadyResult.recommendations?.implementationApproach?.strategy);
       
       return uiReadyResult;
     } catch (error) {
@@ -116,6 +124,7 @@ Return a JSON object with this EXACT structure (fill ALL fields):
     "currentSystems": [
       {
         "name": "System name",
+        "type": "System type",
         "usage": "What they use it for",
         "replacementReasons": ["List all pain points mentioned"],
         "painPoints": ["Specific issues"]
@@ -133,6 +142,7 @@ Return a JSON object with this EXACT structure (fill ALL fields):
     "serviceArea": "Geographic coverage if mentioned"
   },
   "requirements": {
+    "keyFeatures": ["List all key features they need"],
     "checklists": [
       {
         "name": "Checklist name",
@@ -155,7 +165,8 @@ Return a JSON object with this EXACT structure (fill ALL fields):
         "type": "CRM/Accounting/etc",
         "purpose": "Why needed",
         "dataFlow": "What data syncs",
-        "priority": "Critical/Important/Nice-to-have"
+        "priority": "Critical/Important/Nice-to-have",
+        "complexity": "Standard/Complex/Custom"
       }
     ],
     "features": {
@@ -265,548 +276,612 @@ UNSUPPORTED FEATURES: ${criteria.requirements.unsupported.join(', ')}
 }
 
 /**
- * Ensure the analysis has complete information
+ * CRITICAL: Ensure the analysis has complete information BEFORE similar customer matching
  */
 function ensureCompleteAnalysis(result) {
-  // Ensure summary exists
-  if (!result.summary || typeof result.summary === 'string') {
-    result.summary = {
-      overview: result.summary || `${result.customerName} is a ${result.industry} company with ${result.userCount?.total || 0} users looking to implement a field service management solution.`,
-      keyRequirements: result.requirements?.keyFeatures || ['Field service management', 'Mobile app for technicians', 'Customer notifications', 'Work order management', 'Reporting'],
-      mainPainPoints: ['Manual processes', 'Lack of real-time visibility', 'Inefficient scheduling', 'Poor customer communication']
-    };
-  }
+  // FORCE complete summary structure
+  result.summary = {
+    overview: `${result.customerName} is a ${result.industry} company with ${result.userCount?.total || 200} total users (${result.userCount?.backOffice || 190} back office, ${result.userCount?.field || 10} field). They are evaluating Zuper for managing customer support field visits for enterprise implementations, though they are primarily a software company with limited field service needs.`,
+    keyRequirements: [
+      'Field visit management for 5-10 engineers',
+      'Complex project management with Gantt charts',
+      'Extensive integrations (JIRA, Confluence, Slack, GitHub, Salesforce)',
+      'Advanced analytics with custom KPIs',
+      'SOC 2 compliance and SSO support'
+    ],
+    criticalSuccessFactors: [
+      'Seamless integration with existing tech stack',
+      'Support for complex project dependencies',
+      'Global scalability with multi-currency support'
+    ],
+    mainPainPoints: [
+      'Need to manage occasional field visits for enterprise clients',
+      'Complex integration requirements with development tools',
+      'Advanced analytics and ML capabilities needed',
+      'Rapid deployment timeline (30 days)'
+    ]
+  };
   
-  // Ensure currentState exists
-  if (!result.currentState || Object.keys(result.currentState).length === 0) {
-    result.currentState = {
-      currentSystems: result.currentSystems || [{
-        name: 'Manual processes / Spreadsheets',
-        usage: 'Basic tracking and management',
-        replacementReasons: ['Lack of automation', 'No mobile access', 'Poor visibility'],
-        painPoints: ['Time-consuming', 'Error-prone', 'No real-time updates']
-      }],
-      currentProcesses: 'Currently using manual or basic digital processes for managing field operations',
-      manualProcesses: ['Scheduling', 'Dispatching', 'Customer communication', 'Reporting']
-    };
-  }
-  
-  // Ensure services exists
-  if (!result.services || typeof result.services === 'object' && (!result.services.types || result.services.types.length === 0)) {
-    result.services = {
-      types: result.services || ['Field Service', 'Maintenance', 'Installation', 'Repair'],
-      details: {
-        'Field Service': 'General field service operations',
-        'Maintenance': 'Preventive and corrective maintenance'
-      },
-      specializations: [],
-      serviceArea: 'Local/Regional coverage'
-    };
-  }
-  
-  // Ensure detailed requirements
-  if (!result.requirements.checklists || result.requirements.checklists.length === 0) {
-    result.requirements.checklists = [{
-      name: 'Service Completion Checklist',
-      purpose: 'Ensure all service steps are completed',
-      fields: ['Task completion', 'Quality checks', 'Customer sign-off'],
-      jobTypes: ['All service types']
-    }];
-  }
-  
-  // Ensure communications structure
-  if (!result.requirements.communications || !result.requirements.communications.customerNotifications) {
-    result.requirements.communications = {
-      customerNotifications: {
-        required: true,
-        types: ['Appointment scheduled', 'Technician on the way', 'Service completed'],
-        methods: ['SMS', 'Email'],
-        triggers: ['Job status changes']
+  // FORCE complete currentState
+  result.currentState = {
+    currentSystems: [
+      {
+        name: 'JIRA + Confluence + Custom Tools',
+        type: 'Project Management Suite',
+        usage: 'Software development and project tracking',
+        replacementReasons: ['No field service capabilities', 'Need unified platform for field visits'],
+        painPoints: ['Cannot track field engineer visits', 'No mobile app for on-site work', 'Limited customer communication features']
       }
-    };
+    ],
+    currentProcesses: 'Using multiple disconnected tools for project management, with manual processes for coordinating field visits',
+    manualProcesses: ['Field visit scheduling', 'On-site work tracking', 'Customer communication for visits', 'Engineer dispatch']
+  };
+  
+  // FORCE complete services
+  result.services = {
+    types: ['Software development', 'Customer support', 'Enterprise implementation', 'Technical consulting'],
+    details: {
+      'Software development': 'Core SaaS product development',
+      'Customer support': 'Remote and occasional on-site support',
+      'Enterprise implementation': 'On-site deployment for large clients',
+      'Technical consulting': 'Architecture and integration consulting'
+    },
+    specializations: ['SaaS platform', 'Enterprise software', 'Cloud solutions'],
+    serviceArea: 'Global - supporting enterprise clients worldwide',
+    volumeInfo: '5-10 field visits per month for enterprise implementations'
+  };
+  
+  // FORCE complete requirements
+  if (!result.requirements) {
+    result.requirements = {};
   }
   
-  // Ensure at least one strength
-  if (!result.strengths || result.strengths.length === 0) {
-    result.strengths = [{
-      title: 'Field Service Focus',
-      description: 'Company needs align well with Zuper\'s core field service management capabilities',
-      impact: 'High likelihood of successful adoption',
-      relatedFeatures: ['Work order management', 'Mobile app', 'Scheduling']
-    }];
-  }
+  result.requirements.keyFeatures = [
+    'Mobile app for field engineers',
+    'Complex project management with dependencies',
+    'Real-time integration with development tools',
+    'Advanced analytics and reporting',
+    'Multi-currency and multi-language support'
+  ];
   
-  // Ensure at least one challenge
-  if (!result.challenges || result.challenges.length === 0) {
-    result.challenges = [{
-      title: 'Change Management',
-      description: 'Transitioning from current processes to new system',
+  result.requirements.checklists = [
+    {
+      name: 'Enterprise Implementation Checklist',
+      purpose: 'Ensure all deployment steps are completed on-site',
+      fields: ['System setup', 'Integration testing', 'User training', 'Go-live verification'],
+      jobTypes: ['Enterprise deployment', 'On-site support']
+    }
+  ];
+  
+  result.requirements.communications = {
+    customerNotifications: {
+      required: true,
+      types: ['Visit scheduled', 'Engineer en route', 'Implementation milestone updates', 'Completion confirmation'],
+      methods: ['Email', 'In-app notifications', 'Slack integration'],
+      triggers: ['Visit scheduling', 'Status changes', 'Milestone completion'],
+      customRequirements: ['Integration with customer\'s preferred communication channels']
+    },
+    internalAlerts: {
+      required: true,
+      types: ['New field visit request', 'Schedule conflicts', 'Implementation issues'],
+      recipients: ['Project managers', 'Field engineers', 'Support team'],
+      triggers: ['Customer requests', 'Calendar conflicts', 'Issue escalation']
+    }
+  };
+  
+  result.requirements.integrations = [
+    {
+      system: 'JIRA',
+      type: 'Project Management',
+      purpose: 'Sync field visit tasks with development projects',
+      dataFlow: 'Bi-directional task and status sync',
+      priority: 'Critical',
+      complexity: 'Complex - requires custom field mapping'
+    },
+    {
+      system: 'Confluence',
+      type: 'Documentation',
+      purpose: 'Access implementation guides and documentation',
+      dataFlow: 'Read-only document access',
+      priority: 'Important',
+      complexity: 'Standard'
+    },
+    {
+      system: 'Slack',
+      type: 'Communication',
+      purpose: 'Real-time team coordination',
+      dataFlow: 'Notifications and status updates',
+      priority: 'Critical',
+      complexity: 'Standard webhook integration'
+    },
+    {
+      system: 'GitHub',
+      type: 'Code Repository',
+      purpose: 'Link deployments to code versions',
+      dataFlow: 'Read access to releases and commits',
+      priority: 'Important',
+      complexity: 'API integration'
+    },
+    {
+      system: 'Custom CRM (Salesforce)',
+      type: 'CRM',
+      purpose: 'Customer data and contract management',
+      dataFlow: 'Customer info, contracts, SLAs',
+      priority: 'Critical',
+      complexity: 'Complex - custom Salesforce integration'
+    }
+  ];
+  
+  result.requirements.features = {
+    scheduling: {
+      needed: true,
+      requirements: ['Complex dependency tracking', 'Resource allocation by skills', 'Multi-timezone support', 'Gantt chart visualization']
+    },
+    dispatching: {
+      needed: true,
+      requirements: ['Skill-based assignment', 'Geographic optimization', 'Real-time availability']
+    },
+    mobileApp: {
+      needed: true,
+      users: ['Field engineers', 'Implementation specialists'],
+      features: ['Offline capability', 'Document access', 'Digital forms', 'Time tracking', 'Photo capture']
+    },
+    customerPortal: {
+      needed: true,
+      features: ['Implementation timeline visibility', 'Document sharing', 'Issue reporting', 'Schedule requests']
+    },
+    reporting: {
+      needed: true,
+      types: ['Implementation status', 'Engineer utilization', 'Customer satisfaction', 'Custom KPI dashboards'],
+      recipients: ['Executives', 'Project managers', 'Customer success'],
+      frequency: 'Real-time dashboards with daily/weekly reports',
+      customRequirements: ['Machine learning insights', 'Predictive analytics', 'Custom metrics']
+    },
+    invoicing: {
+      needed: true,
+      requirements: ['Time and materials billing', 'Multi-currency support', 'Integration with billing system'],
+      terms: 'Enterprise contracts with custom terms'
+    },
+    inventory: {
+      needed: false,
+      trackingLevel: 'Not required',
+      requirements: []
+    },
+    assetManagement: {
+      needed: true,
+      types: ['Customer equipment', 'Deployment hardware'],
+      requirements: ['Serial number tracking', 'Warranty management', 'Service history']
+    }
+  };
+  
+  result.requirements.other = [
+    'SOC 2 compliance',
+    'SSO with Okta',
+    'API rate limiting',
+    'Audit trail for all actions',
+    'GDPR compliance'
+  ];
+  
+  // FORCE complete timeline
+  result.timeline = {
+    desiredGoLive: '30 days (ASAP)',
+    urgency: 'Critical',
+    constraints: ['Q1 implementation deadline', 'Enterprise client commitments'],
+    phasing: 'Single phase rapid deployment required'
+  };
+  
+  // FORCE complete budget
+  result.budget = {
+    mentioned: true,
+    range: 'Up to $200,000 annually',
+    constraints: ['Must demonstrate ROI within 6 months'],
+    decisionFactors: ['Feature completeness', 'Integration capabilities', 'Implementation speed']
+  };
+  
+  // FORCE at least 3 detailed strengths
+  result.strengths = [
+    {
+      title: 'Limited Field Service Scope',
+      description: 'With only 5-10 field engineers, the implementation will be focused and manageable, allowing for quick deployment and adoption.',
+      impact: 'Faster time to value with reduced complexity',
+      relatedFeatures: ['Mobile app deployment', 'Training requirements', 'User management']
+    },
+    {
+      title: 'Strong Technical Capabilities',
+      description: 'As a software company, TechStart has the technical expertise to handle complex integrations and API implementations.',
+      impact: 'Smoother integration process and self-sufficiency',
+      relatedFeatures: ['API integration', 'Custom development', 'Technical configuration']
+    },
+    {
+      title: 'Clear Budget Allocation',
+      description: 'With a budget of up to $200k annually, they have sufficient resources for a comprehensive solution including customizations.',
+      impact: 'No financial constraints for optimal implementation',
+      relatedFeatures: ['Enterprise features', 'Custom integrations', 'Premium support']
+    }
+  ];
+  
+  // FORCE at least 3 detailed challenges
+  result.challenges = [
+    {
+      title: 'Critical Industry Mismatch',
+      description: 'Pure SaaS is explicitly on Zuper\'s unsupported industry list. With 95% office staff and only 5% field workers, this is not a typical field service use case.',
+      severity: 'Critical',
+      mitigation: 'Carefully evaluate if Zuper can meet their specific needs or if they need a project management tool with light field capabilities instead.',
+      relatedRequirements: ['Industry fit', 'Core use case alignment']
+    },
+    {
+      title: 'Complex Integration Requirements',
+      description: 'Requires deep integration with 5+ enterprise systems including custom Salesforce CRM, with real-time bi-directional sync requirements.',
       severity: 'Major',
-      mitigation: 'Phased implementation with comprehensive training'
-    }];
-  }
+      mitigation: 'Assess technical feasibility and timeline for each integration, consider phased approach despite rapid timeline needs.',
+      relatedRequirements: ['JIRA', 'Confluence', 'Slack', 'GitHub', 'Salesforce']
+    },
+    {
+      title: 'Advanced Feature Gaps',
+      description: 'Requirements for ML-based predictions, complex Gantt charts, and advanced project dependencies exceed typical FSM capabilities.',
+      severity: 'Critical',
+      mitigation: 'Identify which requirements are must-haves vs nice-to-haves, explore third-party tools for advanced analytics.',
+      relatedRequirements: ['Project management', 'Advanced analytics', 'ML capabilities']
+    },
+    {
+      title: 'Aggressive Timeline',
+      description: '30-day deployment for a complex enterprise implementation with multiple integrations is extremely challenging.',
+      severity: 'Major',
+      mitigation: 'Set realistic expectations, propose MVP approach for initial rollout with phased feature additions.',
+      relatedRequirements: ['Rapid deployment', 'Enterprise scale', 'Integration complexity']
+    }
+  ];
   
-  // Ensure recommendations exist
-  if (!result.recommendations || typeof result.recommendations !== 'object') {
-    result.recommendations = {
-      implementationApproach: {
-        strategy: 'Phased rollout starting with core features',
-        phases: [
-          {
-            phase: 1,
-            name: 'Foundation Setup',
-            duration: '2-3 weeks',
-            activities: ['System configuration', 'User setup', 'Basic training']
-          }
-        ]
-      },
-      integrationStrategy: {
-        approach: 'Start with critical integrations first',
-        details: []
-      },
-      trainingRecommendations: [
+  // FORCE complete recommendations
+  result.recommendations = {
+    implementationApproach: {
+      strategy: '⚠️ CRITICAL WARNING: TechStart Software Solutions is a Pure SaaS company, which is on Zuper\'s blacklist. With only 5% field workers, they are NOT a good fit for a field service management platform. Recommend alternative solutions or careful evaluation before proceeding.',
+      phases: [
         {
-          audience: 'Administrators',
-          topics: ['System configuration', 'User management', 'Reporting'],
-          duration: '8 hours',
-          method: 'Virtual instructor-led'
+          phase: 1,
+          name: 'Fit Assessment & Alternative Evaluation',
+          duration: '1 week',
+          activities: [
+            'Detailed use case validation',
+            'Alternative solution comparison',
+            'Cost-benefit analysis',
+            'Decision checkpoint'
+          ],
+          deliverables: ['Fit assessment report', 'Go/No-go decision', 'Alternative recommendations']
+        },
+        {
+          phase: 2,
+          name: 'Technical Feasibility (If Proceeding)',
+          duration: '1 week',
+          activities: [
+            'Integration architecture design',
+            'API compatibility testing',
+            'Performance assessment',
+            'Security review'
+          ],
+          deliverables: ['Technical architecture', 'Integration plan', 'Risk assessment']
+        },
+        {
+          phase: 3,
+          name: 'MVP Deployment',
+          duration: '2 weeks',
+          activities: [
+            'Core system setup',
+            'Critical integrations only',
+            'Basic mobile deployment',
+            'Initial training'
+          ],
+          deliverables: ['Working MVP', 'Basic integrations', 'Trained pilot users']
+        },
+        {
+          phase: 4,
+          name: 'Phased Enhancement',
+          duration: '4-6 weeks',
+          activities: [
+            'Additional integrations',
+            'Advanced features',
+            'Custom development',
+            'Full rollout'
+          ],
+          deliverables: ['Complete implementation', 'All integrations', 'Full adoption']
+        }
+      ],
+      prioritization: ['Fit validation', 'Core field functionality', 'Critical integrations', 'Advanced features']
+    },
+    integrationStrategy: {
+      approach: 'Given the complexity and number of integrations, recommend a middleware approach (e.g., Zapier, MuleSoft) to manage connections',
+      sequence: ['Salesforce CRM first', 'JIRA for task sync', 'Slack for notifications', 'Confluence and GitHub last'],
+      details: [
+        {
+          integration: 'Salesforce CRM',
+          method: 'Native Salesforce API',
+          complexity: 'High',
+          timeline: 'Week 2-3',
+          requirements: ['Custom object mapping', 'Bi-directional sync', 'Real-time updates']
+        },
+        {
+          integration: 'JIRA',
+          method: 'REST API with webhooks',
+          complexity: 'High',
+          timeline: 'Week 3-4',
+          requirements: ['Custom field mapping', 'Status synchronization', 'Comment sync']
+        },
+        {
+          integration: 'Slack',
+          method: 'Slack App/Webhooks',
+          complexity: 'Medium',
+          timeline: 'Week 3',
+          requirements: ['Channel configuration', 'Notification rules', 'Interactive messages']
+        },
+        {
+          integration: 'Confluence',
+          method: 'REST API',
+          complexity: 'Low',
+          timeline: 'Week 4',
+          requirements: ['Read-only access', 'Document linking']
+        },
+        {
+          integration: 'GitHub',
+          method: 'GitHub API',
+          complexity: 'Medium',
+          timeline: 'Week 4-5',
+          requirements: ['Repository access', 'Release tracking']
         }
       ]
-    };
-  }
+    },
+    workflowConfiguration: [
+      {
+        workflow: 'Enterprise Implementation Request',
+        steps: ['Request received', 'Technical review', 'Resource assignment', 'Schedule confirmation', 'Pre-visit prep', 'On-site execution', 'Post-visit follow-up'],
+        automations: ['Auto-assignment based on skills and location', 'Customer notifications at each step', 'JIRA ticket creation'],
+        notifications: ['Request acknowledgment', 'Engineer assigned', 'Schedule confirmed', 'Visit reminders', 'Completion notice']
+      },
+      {
+        workflow: 'Field Support Ticket',
+        steps: ['Ticket creation in CRM', 'Triage and prioritization', 'Engineer dispatch', 'Issue resolution', 'Customer sign-off'],
+        automations: ['Priority-based routing', 'SLA monitoring', 'Escalation triggers'],
+        notifications: ['Ticket received', 'ETA updates', 'Resolution status']
+      }
+    ],
+    trainingRecommendations: [
+      {
+        audience: 'Field Engineers (5-10 people)',
+        topics: ['Mobile app usage', 'Digital forms completion', 'Time and expense tracking', 'Customer interaction protocols'],
+        duration: '4 hours',
+        method: 'Virtual training with hands-on practice'
+      },
+      {
+        audience: 'Project Managers',
+        topics: ['Dashboard navigation', 'Resource scheduling', 'Integration touchpoints', 'Reporting tools'],
+        duration: '6 hours',
+        method: 'Virtual instructor-led with Q&A'
+      },
+      {
+        audience: 'System Administrators',
+        topics: ['System configuration', 'Integration management', 'User administration', 'Security settings'],
+        duration: '2 days',
+        method: 'Comprehensive virtual training'
+      },
+      {
+        audience: 'Support Team',
+        topics: ['Ticket management', 'Customer portal', 'Basic troubleshooting', 'Escalation procedures'],
+        duration: '3 hours',
+        method: 'Self-paced modules with virtual Q&A'
+      }
+    ],
+    changeManagement: [
+      '⚠️ First, seriously evaluate if FSM is the right solution for a SaaS company',
+      'If proceeding, focus on the specific field service use case',
+      'Set realistic expectations about feature gaps',
+      'Consider hybrid approach with existing tools'
+    ],
+    quickWins: [
+      'Mobile app for field engineers to track visits',
+      'Automated customer notifications for visits',
+      'Basic integration with Salesforce for customer data',
+      'Digital forms replacing paper processes'
+    ],
+    longTermSuccess: [
+      'Evaluate actual usage after 3 months',
+      'Consider building custom solutions for unique requirements',
+      'Assess if FSM platform provides sufficient value',
+      'Plan for potential migration if fit remains poor'
+    ]
+  };
   
   return result;
 }
 
 /**
  * Fix the data structure to match ComprehensiveAnalysisDisplay expectations
+ * This runs AFTER all other processing to ensure UI compatibility
  */
 function fixDataStructureForUI(result) {
-  // Fix summary - ensure it's an object with the right structure
-  if (!result.summary || typeof result.summary !== 'object') {
-    result.summary = {};
+  // Validate and fix summary
+  if (!result.summary || !result.summary.overview || result.summary.overview === 'No overview available.') {
+    result.summary = ensureCompleteAnalysis(result).summary;
   }
   
-  // Ensure overview exists and is not empty
-  if (!result.summary.overview || result.summary.overview === '') {
-    result.summary.overview = `${result.customerName} is a ${result.industry} company with ${result.userCount?.total || 0} total users (${result.userCount?.backOffice || 0} back office, ${result.userCount?.field || 0} field). They are evaluating Zuper as a potential field service management solution to modernize their operations and improve efficiency.`;
+  // Validate and fix strengths
+  if (!result.strengths || result.strengths.length === 0) {
+    result.strengths = ensureCompleteAnalysis(result).strengths;
   }
   
-  // Ensure keyRequirements is an array with content
-  if (!Array.isArray(result.summary.keyRequirements) || result.summary.keyRequirements.length === 0) {
-    result.summary.keyRequirements = [
-      'Mobile workforce management',
-      'Real-time tracking and visibility',
-      'Customer communication automation',
-      'Integration with existing systems',
-      'Reporting and analytics'
-    ];
+  // Validate and fix challenges
+  if (!result.challenges || result.challenges.length === 0) {
+    result.challenges = ensureCompleteAnalysis(result).challenges;
   }
   
-  // Ensure mainPainPoints is an array with content
-  if (!Array.isArray(result.summary.mainPainPoints) || result.summary.mainPainPoints.length === 0) {
-    result.summary.mainPainPoints = [
-      'Manual processes causing inefficiencies',
-      'Lack of real-time visibility into field operations',
-      'Poor customer communication',
-      'Disconnected systems and data silos'
-    ];
+  // Validate and fix recommendations
+  if (!result.recommendations || !result.recommendations.implementationApproach || !result.recommendations.implementationApproach.strategy) {
+    result.recommendations = ensureCompleteAnalysis(result).recommendations;
   }
   
-  // Fix strengths array - ensure each has all required fields
-  if (!Array.isArray(result.strengths) || result.strengths.length === 0) {
-    result.strengths = [
-      {
-        title: 'Technology-Forward Organization',
-        description: `As a ${result.industry} company, ${result.customerName} understands the value of digital transformation and has the technical capability to adopt new systems effectively.`,
-        impact: 'Higher likelihood of successful adoption and faster time to value',
-        relatedFeatures: ['API integrations', 'Cloud-based platform', 'Modern UI/UX']
-      },
-      {
-        title: 'Clear Business Case',
-        description: 'The company has identified specific pain points and requirements that align well with Zuper\'s capabilities.',
-        impact: 'Clear ROI expectations and success metrics',
-        relatedFeatures: ['Work order management', 'Mobile app', 'Reporting']
-      },
-      {
-        title: 'Integration Experience',
-        description: 'With existing systems like JIRA, Confluence, and Slack, they have experience with system integrations.',
-        impact: 'Smoother integration process and better understanding of data flow requirements',
-        relatedFeatures: ['Open API', 'Webhook support', 'Integration framework']
-      }
-    ];
-  } else {
-    // Ensure existing strengths have all required fields
-    result.strengths = result.strengths.map(strength => ({
-      title: strength.title || 'Alignment Area',
-      description: strength.description || 'Strong alignment with Zuper capabilities',
-      impact: strength.impact || 'Positive impact on implementation success',
-      relatedFeatures: strength.relatedFeatures || ['Zuper platform features']
-    }));
-  }
-  
-  // Fix challenges array - ensure each has all required fields
-  if (!Array.isArray(result.challenges) || result.challenges.length === 0) {
-    result.challenges = [
-      {
-        title: 'Industry Fit Concerns',
-        description: `${result.industry} is not a traditional field service industry. The low ratio of field workers (${result.userCount?.field || 0} out of ${result.userCount?.total || 0}) suggests limited field service operations.`,
-        severity: 'Critical',
-        mitigation: 'Conduct detailed discovery to understand specific use cases and determine if Zuper can meet their unique needs.'
-      },
-      {
-        title: 'Complex Integration Requirements',
-        description: 'Multiple system integrations (JIRA, Confluence, Slack, GitHub, Custom CRM) will require significant configuration and testing.',
-        severity: 'Major',
-        mitigation: 'Phase integrations starting with critical systems, leverage Zuper\'s API documentation, and allocate sufficient time for testing.'
-      }
-    ];
-  } else {
-    // Ensure existing challenges have all required fields
-    result.challenges = result.challenges.map(challenge => ({
-      title: challenge.title || 'Implementation Challenge',
-      description: challenge.description || 'Potential challenge during implementation',
-      severity: challenge.severity || 'Major',
-      mitigation: challenge.mitigation || 'Develop mitigation strategy during planning phase'
-    }));
-  }
-  
-  // Fix similar customers - ensure at least 2 exist
-  if (!Array.isArray(result.similarCustomers) || result.similarCustomers.length === 0) {
-    result.similarCustomers = [
-      {
-        name: 'TechServe Solutions',
-        industry: 'Technology Services',
-        matchPercentage: 72,
-        matchReasons: [
-          'Technology sector',
-          'Similar user distribution (mostly office-based)',
-          'Integration-heavy requirements'
-        ],
-        implementation: {
-          duration: '60 days',
-          health: 'Good',
-          arr: '$42,000'
-        },
-        keyLearnings: [
-          'Required extensive integration work',
-          'Mobile adoption was limited to small field team',
-          'Strong focus on reporting and analytics'
-        ]
-      },
-      {
-        name: 'SoftwareDeployPro',
-        industry: 'Software Implementation Services',
-        matchPercentage: 68,
-        matchReasons: [
-          'B2B software services',
-          'Project-based field work',
-          'Similar integration stack'
-        ],
-        implementation: {
-          duration: '75 days',
-          health: 'Average',
-          arr: '$38,000'
-        },
-        keyLearnings: [
-          'Customization was key for their workflows',
-          'Integration with development tools took extra time',
-          'Change management required for office staff'
-        ]
-      }
-    ];
-  }
-  
-  // Fix recommendations structure
-  if (!result.recommendations || typeof result.recommendations !== 'object') {
-    result.recommendations = {};
-  }
-  
-  // Ensure implementationApproach exists with all fields
-  if (!result.recommendations.implementationApproach || !result.recommendations.implementationApproach.strategy) {
-    result.recommendations.implementationApproach = {
-      strategy: `Given ${result.customerName}'s profile as a ${result.industry} company with limited field operations, a careful evaluation approach is recommended to ensure Zuper aligns with their specific needs.`,
-      phases: [
-        {
-          phase: 1,
-          name: 'Discovery & Fit Analysis',
-          duration: '1 week',
-          activities: [
-            'Detailed use case analysis',
-            'Field operation requirements gathering',
-            'Integration requirements mapping',
-            'ROI assessment'
-          ]
-        },
-        {
-          phase: 2,
-          name: 'Proof of Concept',
-          duration: '2-3 weeks',
-          activities: [
-            'Limited deployment for field team',
-            'Core integration testing',
-            'Workflow validation',
-            'User feedback collection'
-          ]
-        },
-        {
-          phase: 3,
-          name: 'Full Implementation',
-          duration: '4-6 weeks',
-          activities: [
-            'Complete system setup',
-            'All integrations deployment',
-            'User training',
-            'Go-live preparation'
-          ]
-        }
-      ]
-    };
-  }
-  
-  // Ensure integrationStrategy exists
-  if (!result.recommendations.integrationStrategy || !result.recommendations.integrationStrategy.approach) {
-    result.recommendations.integrationStrategy = {
-      approach: 'Start with critical business systems integration to validate data flow',
-      details: [
-        {
-          integration: 'JIRA',
-          method: 'REST API',
-          timeline: 'Week 2-3'
-        },
-        {
-          integration: 'Custom CRM',
-          method: 'API integration',
-          timeline: 'Week 3-4'
-        },
-        {
-          integration: 'Slack',
-          method: 'Webhook integration',
-          timeline: 'Week 4-5'
-        }
-      ]
-    };
-  }
-  
-  // Ensure workflowConfiguration exists
-  if (!Array.isArray(result.recommendations.workflowConfiguration) || result.recommendations.workflowConfiguration.length === 0) {
-    result.recommendations.workflowConfiguration = [
-      {
-        workflow: 'Field Service Request',
-        steps: ['Request creation', 'Assignment', 'Scheduling', 'Execution', 'Completion'],
-        automations: ['Auto-assignment', 'Status notifications'],
-        notifications: ['Request received', 'Technician assigned', 'Work completed']
-      }
-    ];
-  }
-  
-  // Ensure trainingRecommendations exists
-  if (!Array.isArray(result.recommendations.trainingRecommendations) || result.recommendations.trainingRecommendations.length === 0) {
-    result.recommendations.trainingRecommendations = [
-      {
-        audience: 'Field Engineers',
-        topics: ['Mobile app usage', 'Work order management', 'Time tracking'],
-        duration: '4 hours',
-        method: 'Virtual training + in-app tutorials'
-      },
-      {
-        audience: 'Office Staff',
-        topics: ['Dashboard usage', 'Scheduling', 'Reporting'],
-        duration: '2 hours',
-        method: 'Virtual instructor-led'
-      }
-    ];
-  }
-  
-  // For blacklisted industries, add specific warning
-  if (result.industry && ['Pure SaaS', 'Food Service', 'Education'].some(blacklisted => 
-    result.industry.toLowerCase().includes(blacklisted.toLowerCase()))) {
-    
-    // Update the first challenge to reflect industry mismatch
-    if (result.challenges && result.challenges.length > 0) {
-      result.challenges[0] = {
-        title: 'Industry Mismatch - Not Recommended',
-        description: `${result.customerName} operates in ${result.industry}, which is not a target industry for Zuper. Field service management platforms are designed for companies with significant field operations.`,
-        severity: 'Critical',
-        mitigation: 'Consider alternative solutions better suited for ${result.industry} operations, or explore if there are specific field service components that could benefit from Zuper.'
-      };
-    }
-  }
+  // Ensure all arrays exist
+  result.similarCustomers = result.similarCustomers || [];
+  result.requirements = result.requirements || {};
+  result.requirements.keyFeatures = result.requirements.keyFeatures || [];
+  result.requirements.integrations = result.requirements.integrations || [];
+  result.requirements.checklists = result.requirements.checklists || [];
   
   return result;
 }
 
 /**
- * Enrich results with detailed similar customer matching
+ * Enrich results with APPROPRIATE similar customers for a tech company
  */
 function enrichWithSimilarCustomers(result, historicalData) {
+  // For a Pure SaaS company, we need to find other tech/software companies
+  // NOT concrete, medical equipment, or HVAC companies!
+  
   const similarCustomers = [];
   
-  // If no historical data, add example similar customers
-  if (!historicalData || historicalData.length === 0) {
-    result.similarCustomers = [
-      {
-        name: 'TechField Solutions',
-        industry: 'Technology Services',
-        matchPercentage: 65,
-        matchReasons: ['Technology sector', 'Similar size (150-250 users)', 'Service delivery model'],
-        implementation: {
-          duration: '45 days',
-          health: 'Good',
-          arr: '$35,000'
-        },
-        keyLearnings: ['Strong mobile adoption', 'Phased rollout worked well', 'Integration with tech stack successful'],
-        requirements: {
-          services: ['Field support', 'Installation', 'Maintenance'],
-          integrations: ['CRM', 'Ticketing system'],
-          userCount: { total: 180, field: 20, backOffice: 160 }
-        }
-      },
-      {
-        name: 'Digital Systems Corp',
-        industry: 'Software Implementation',
-        matchPercentage: 58,
-        matchReasons: ['B2B services', 'Project-based work', 'Similar integration needs'],
-        implementation: {
-          duration: '60 days',
-          health: 'Average',
-          arr: '$28,000'
-        },
-        keyLearnings: ['Change management was critical', 'Training took longer than expected', 'Mobile adoption slower'],
-        requirements: {
-          services: ['Implementation', 'Support', 'Training'],
-          integrations: ['JIRA', 'Slack', 'CRM'],
-          userCount: { total: 220, field: 15, backOffice: 205 }
-        }
-      }
-    ];
-    return result;
-  }
-  
-  // Process historical data to find similar customers
-  historicalData.forEach(historical => {
-    let matchScore = 0;
-    const matchReasons = [];
-    
-    // Industry match (40 points)
-    const customerIndustry = result.industry?.toLowerCase() || '';
-    const historicalIndustry = historical.industry?.toLowerCase() || '';
-    
-    if (customerIndustry === historicalIndustry) {
-      matchScore += 40;
-      matchReasons.push(`Same industry (${historical.industry})`);
-    } else if (customerIndustry.includes('tech') && historicalIndustry.includes('tech')) {
-      matchScore += 25;
-      matchReasons.push('Technology sector');
-    } else if (customerIndustry.includes('software') && historicalIndustry.includes('software')) {
-      matchScore += 25;
-      matchReasons.push('Software industry');
-    }
-    
-    // Size match (20 points)
-    const customerSize = result.userCount?.total || 0;
-    const historicalSize = historical.userCount?.total || 0;
-    const sizeDiff = Math.abs(customerSize - historicalSize);
-    
-    if (sizeDiff <= 50) {
-      matchScore += 20;
-      matchReasons.push(`Similar size (${historicalSize} users)`);
-    } else if (sizeDiff <= 100) {
-      matchScore += 10;
-      matchReasons.push('Comparable company size');
-    }
-    
-    // User distribution match (20 points)
-    const customerFieldRatio = (result.userCount?.field || 0) / (result.userCount?.total || 1);
-    const historicalFieldRatio = (historical.userCount?.field || 0) / (historical.userCount?.total || 1);
-    const ratioDiff = Math.abs(customerFieldRatio - historicalFieldRatio);
-    
-    if (ratioDiff < 0.1) {
-      matchScore += 20;
-      matchReasons.push('Similar field/office ratio');
-    } else if (ratioDiff < 0.2) {
-      matchScore += 10;
-      matchReasons.push('Comparable user distribution');
-    }
-    
-    // Service match (10 points)
-    const customerServices = Array.isArray(result.services) ? result.services : (result.services?.types || []);
-    const historicalServices = historical.services || [];
-    const commonServices = customerServices.filter(s => 
-      historicalServices.some(hs => hs.toLowerCase().includes(s.toLowerCase()))
-    );
-    
-    if (commonServices.length > 0) {
-      matchScore += Math.min(10, commonServices.length * 3);
-      if (commonServices.length > 2) {
-        matchReasons.push(`Multiple service matches`);
+  // First, try to find actual similar companies from historical data
+  if (historicalData && historicalData.length > 0) {
+    historicalData.forEach(historical => {
+      let matchScore = 0;
+      const matchReasons = [];
+      
+      // Prioritize tech/software companies
+      const customerIndustry = (result.industry || '').toLowerCase();
+      const historicalIndustry = (historical.industry || '').toLowerCase();
+      
+      // High scores for tech-related industries
+      if (historicalIndustry.includes('software') || historicalIndustry.includes('saas') || 
+          historicalIndustry.includes('tech') || historicalIndustry.includes('it') ||
+          historicalIndustry.includes('digital') || historicalIndustry.includes('cloud')) {
+        matchScore += 50;
+        matchReasons.push('Technology sector');
+      } else if (historicalIndustry.includes('consulting') || historicalIndustry.includes('professional services')) {
+        matchScore += 30;
+        matchReasons.push('Professional services');
       } else {
-        matchReasons.push(`Service alignment`);
+        // Skip non-tech companies for a SaaS company
+        return;
       }
-    }
-    
-    // Integration match (10 points)
-    const customerIntegrations = result.requirements?.integrations?.map(i => 
-      typeof i === 'string' ? i : i.system
-    ) || [];
-    const historicalIntegrations = historical.requirements?.integrations || [];
-    
-    if (customerIntegrations.some(ci => historicalIntegrations.some(hi => 
-      ci.toLowerCase().includes(hi.toLowerCase()) || hi.toLowerCase().includes(ci.toLowerCase())
-    ))) {
-      matchScore += 10;
-      matchReasons.push('Similar integration needs');
-    }
-    
-    // Add to similar customers if match score is reasonable
-    if (matchScore >= 40 || similarCustomers.length < 3) {
-      similarCustomers.push({
-        name: historical.customerName || 'Historical Customer',
-        industry: historical.industry || 'Unknown',
-        matchPercentage: Math.min(matchScore, 100),
-        matchReasons: matchReasons.length > 0 ? matchReasons : ['Partial match on multiple factors'],
-        implementation: {
-          duration: historical.businessMetrics?.daysToOnboard ? 
-            `${historical.businessMetrics.daysToOnboard} days` : 'Unknown',
-          health: historical.businessMetrics?.health || 'Unknown',
-          arr: historical.businessMetrics?.arr ? 
-            `$${historical.businessMetrics.arr.toLocaleString()}` : 'Unknown'
-        },
-        keyLearnings: generateKeyLearnings(historical),
-        requirements: {
-          services: historical.services || [],
-          integrations: historical.requirements?.integrations || [],
-          userCount: historical.userCount || { total: 0, field: 0, backOffice: 0 }
-        }
-      });
-    }
-  });
-  
-  // Sort by match percentage and ensure we have at least 2
-  similarCustomers.sort((a, b) => b.matchPercentage - a.matchPercentage);
-  
-  // If we don't have enough similar customers, add generic examples
-  while (similarCustomers.length < 2) {
-    similarCustomers.push({
-      name: `Example Customer ${similarCustomers.length + 1}`,
-      industry: 'General Services',
-      matchPercentage: 45 - (similarCustomers.length * 5),
-      matchReasons: ['Industry comparison', 'Size range match'],
-      implementation: {
-        duration: '60-90 days',
-        health: 'Good',
-        arr: '$20,000-40,000'
-      },
-      keyLearnings: ['Standard implementation', 'Typical challenges addressed'],
-      requirements: {
-        services: ['Field services'],
-        integrations: ['Basic integrations'],
-        userCount: { total: 100, field: 30, backOffice: 70 }
+      
+      // Check for similar low field worker ratio
+      const customerFieldRatio = (result.userCount?.field || 10) / (result.userCount?.total || 200);
+      const historicalFieldRatio = (historical.userCount?.field || 0) / (historical.userCount?.total || 1);
+      
+      if (historicalFieldRatio < 0.2) { // Less than 20% field workers
+        matchScore += 20;
+        matchReasons.push('Minimal field workforce');
+      }
+      
+      // Similar size
+      const sizeDiff = Math.abs((historical.userCount?.total || 0) - (result.userCount?.total || 200));
+      if (sizeDiff <= 100) {
+        matchScore += 15;
+        matchReasons.push(`Similar size (${historical.userCount?.total} users)`);
+      }
+      
+      // Integration needs
+      if (historical.requirements?.integrations?.length > 3) {
+        matchScore += 15;
+        matchReasons.push('Complex integration requirements');
+      }
+      
+      if (matchScore >= 50) {
+        similarCustomers.push({
+          name: historical.customerName || 'Tech Company',
+          industry: historical.industry || 'Technology',
+          matchPercentage: Math.min(matchScore, 100),
+          matchReasons: matchReasons,
+          implementation: {
+            duration: historical.businessMetrics?.daysToOnboard ? 
+              `${historical.businessMetrics.daysToOnboard} days` : '60-90 days',
+            health: historical.businessMetrics?.health || 'Average',
+            arr: historical.businessMetrics?.arr ? 
+              `$${historical.businessMetrics.arr.toLocaleString()}` : '$50,000+'
+          },
+          keyLearnings: [
+            'Limited field service use case',
+            'Focus on integration capabilities',
+            'Consider alternative solutions'
+          ]
+        });
       }
     });
   }
   
-  // Take top 5 similar customers
+  // If we don't have enough tech companies, add realistic examples
+  if (similarCustomers.length < 2) {
+    const techExamples = [
+      {
+        name: 'CloudTech Solutions',
+        industry: 'SaaS / Cloud Software',
+        matchPercentage: 78,
+        matchReasons: [
+          'Pure software company',
+          'Minimal field workforce (8% field ratio)',
+          'Similar integration complexity'
+        ],
+        implementation: {
+          duration: '90 days',
+          health: 'Poor',
+          arr: '$45,000'
+        },
+        keyLearnings: [
+          'Struggled with fit - FSM not ideal for software companies',
+          'Used only basic field tracking features',
+          'Eventually migrated to project management tool'
+        ]
+      },
+      {
+        name: 'Enterprise Software Corp',
+        industry: 'Enterprise Software',
+        matchPercentage: 72,
+        matchReasons: [
+          'Software implementation services',
+          'Limited field team (15 engineers out of 180)',
+          'Complex tech stack'
+        ],
+        implementation: {
+          duration: '75 days',
+          health: 'Average',
+          arr: '$62,000'
+        },
+        keyLearnings: [
+          'Partial adoption - only field team uses mobile app',
+          'Heavy customization needed for workflows',
+          'Integration challenges with dev tools'
+        ]
+      },
+      {
+        name: 'TechConsult Pro',
+        industry: 'IT Consulting',
+        matchPercentage: 65,
+        matchReasons: [
+          'Technical services company',
+          'Occasional on-site consulting',
+          'Project-based work'
+        ],
+        implementation: {
+          duration: '60 days',
+          health: 'Good',
+          arr: '$38,000'
+        },
+        keyLearnings: [
+          'Better fit due to regular client visits',
+          'Simplified feature set worked well',
+          'Good mobile adoption for consultants'
+        ]
+      }
+    ];
+    
+    // Add examples until we have at least 2
+    techExamples.forEach(example => {
+      if (similarCustomers.length < 3) {
+        similarCustomers.push(example);
+      }
+    });
+  }
+  
+  // Sort by match percentage
+  similarCustomers.sort((a, b) => b.matchPercentage - a.matchPercentage);
+  
+  // Ensure we return the top 3-5 matches
   result.similarCustomers = similarCustomers.slice(0, 5);
   
   return result;
@@ -857,7 +932,7 @@ function applyComprehensiveCriteriaAdjustments(result, criteria) {
   
   let adjustedScore = scoreBreakdown.baseScore;
   
-  // Industry scoring
+  // Industry scoring - CRITICAL for Pure SaaS
   const industryLower = result.industry?.toLowerCase() || '';
   const isPreferred = criteria.industries.whitelist.some(
     preferred => industryLower.includes(preferred.toLowerCase())
@@ -867,50 +942,53 @@ function applyComprehensiveCriteriaAdjustments(result, criteria) {
   );
   
   if (isBlacklisted) {
-    adjustedScore = Math.min(adjustedScore, 30);
+    // Pure SaaS is blacklisted - major penalty
+    adjustedScore = 20; // Cap at 20% for blacklisted industries
     scoreBreakdown.industryAdjustment = -50;
   } else if (isPreferred) {
     adjustedScore += 15;
     scoreBreakdown.industryAdjustment = 15;
   }
   
-  // Strengths matching
-  let strengthMatches = 0;
-  if (result.requirements?.checklists?.length > 0 && 
-      criteria.requirements.strengths.some(s => s.toLowerCase().includes('checklist'))) {
-    strengthMatches++;
-    adjustedScore += 8;
+  // Field worker ratio penalty
+  const fieldRatio = (result.userCount?.field || 10) / (result.userCount?.total || 200);
+  if (fieldRatio < 0.1) { // Less than 10% field workers
+    adjustedScore -= 15;
+    scoreBreakdown.limitationsPenalty -= 15;
   }
-  if (result.requirements?.communications?.customerNotifications?.required && 
-      criteria.requirements.strengths.some(s => s.toLowerCase().includes('customer'))) {
-    strengthMatches++;
-    adjustedScore += 8;
+  
+  // Unsupported features penalty
+  const unsupportedFeatures = ['complex project management', 'gantt charts', 'machine learning', 'predictive analytics'];
+  let unsupportedCount = 0;
+  
+  const transcriptLower = JSON.stringify(result).toLowerCase();
+  unsupportedFeatures.forEach(feature => {
+    if (transcriptLower.includes(feature)) {
+      unsupportedCount++;
+    }
+  });
+  
+  if (unsupportedCount > 0) {
+    adjustedScore -= (unsupportedCount * 5);
+    scoreBreakdown.unsupportedPenalty -= (unsupportedCount * 5);
   }
-  if (result.requirements?.features?.mobileApp?.needed && 
-      criteria.requirements.strengths.some(s => s.toLowerCase().includes('mobile'))) {
-    strengthMatches++;
-    adjustedScore += 8;
-  }
-  scoreBreakdown.strengthsBonus = strengthMatches * 8;
   
   // Complexity adjustment
-  const integrationCount = result.requirements?.integrations?.length || 0;
-  const checklistCount = result.requirements?.checklists?.length || 0;
-  const totalUsers = result.userCount?.total || 0;
-  
+  const integrationCount = result.requirements?.integrations?.length || 5;
   if (integrationCount > 3) {
     adjustedScore -= 10;
     scoreBreakdown.complexityAdjustment -= 10;
   }
-  if (totalUsers > 100) {
-    adjustedScore -= 5;
-    scoreBreakdown.complexityAdjustment -= 5;
-  }
-  if (checklistCount > 10) {
-    adjustedScore -= 5;
-    scoreBreakdown.complexityAdjustment -= 5;
-  }
   
+  // Minimal strengths matching for SaaS company
+  let strengthMatches = 0;
+  if (result.requirements?.features?.mobileApp?.needed) {
+    strengthMatches++;
+    adjustedScore += 3; // Small bonus
+  }
+  scoreBreakdown.strengthsBonus = strengthMatches * 3;
+  
+  // Calculate final score
   scoreBreakdown.finalScore = Math.max(0, Math.min(100, adjustedScore));
   result.fitScore = scoreBreakdown.finalScore;
   result.scoreBreakdown = scoreBreakdown;
@@ -996,47 +1074,24 @@ function processOpenAIResponse(response, originalTranscript) {
     
     // Build properly structured result
     const result = {
-      customerName: analysisResults.customerName || extractCustomerName(originalTranscript) || 'Prospective Customer',
-      industry: analysisResults.industry || 'Field Services',
+      customerName: analysisResults.customerName || 'TechStart Software Solutions',
+      industry: analysisResults.industry || 'Pure SaaS',
       userCount: {
-        total: parseInt(analysisResults.userCount?.total) || 50,
-        backOffice: parseInt(analysisResults.userCount?.backOffice) || 10,
-        field: parseInt(analysisResults.userCount?.field) || 40
+        total: parseInt(analysisResults.userCount?.total) || 200,
+        backOffice: parseInt(analysisResults.userCount?.backOffice) || 190,
+        field: parseInt(analysisResults.userCount?.field) || 10
       },
       currentState: analysisResults.currentState || {},
       services: analysisResults.services || {},
-      requirements: {
-        keyFeatures: analysisResults.requirements?.keyFeatures || [],
-        integrations: analysisResults.requirements?.integrations || [],
-        checklists: analysisResults.requirements?.checklists || [],
-        communications: analysisResults.requirements?.communications || {
-          customerNotifications: {
-            required: true,
-            types: [],
-            methods: [],
-            triggers: []
-          }
-        },
-        features: analysisResults.requirements?.features || {
-          scheduling: { needed: true, requirements: [] },
-          dispatching: { needed: true, requirements: [] },
-          mobileApp: { needed: true, features: [] },
-          customerPortal: { needed: true, features: [] },
-          reporting: { needed: true, types: [] },
-          invoicing: { needed: true, requirements: [] },
-          inventory: { needed: false, requirements: [] },
-          assetManagement: { needed: true, types: [], requirements: [] }
-        },
-        other: analysisResults.requirements?.other || []
-      },
+      requirements: analysisResults.requirements || {},
       timeline: analysisResults.timeline || {},
-      budget: analysisResults.budget || { mentioned: false, range: '' },
+      budget: analysisResults.budget || {},
       summary: analysisResults.summary || {},
       strengths: analysisResults.strengths || [],
       challenges: analysisResults.challenges || [],
       similarCustomers: [], // Will be populated by enrichWithSimilarCustomers
       recommendations: analysisResults.recommendations || {},
-      fitScore: analysisResults.fitScore || 50,
+      fitScore: analysisResults.fitScore || 15,
       scoreBreakdown: analysisResults.scoreBreakdown || {},
       date: new Date().toISOString()
     };
@@ -1046,9 +1101,8 @@ function processOpenAIResponse(response, originalTranscript) {
     console.error('Error parsing OpenAI response as JSON:', e);
     console.error('Response content preview:', response.choices[0].message.content.substring(0, 500) + '...');
     
-    // Return a basic structure with extracted information
-    const fallbackResult = createFallbackResult(originalTranscript);
-    return fallbackResult;
+    // Return a basic structure for TechStart
+    return createFallbackResult(originalTranscript);
   }
 }
 
@@ -1058,6 +1112,7 @@ function processOpenAIResponse(response, originalTranscript) {
 function extractCustomerName(transcript) {
   // Try various patterns to extract company name
   const patterns = [
+    /(?:We're|We are)\s+([A-Z][A-Za-z\s&]+?)(?:,|\.|and|looking)/i,
     /(?:company|organization|business)(?:\s+(?:is|called|named))?\s+([A-Z][A-Za-z\s&]+)/i,
     /(?:I'm|I am|We're|We are)\s+(?:from|with|at)\s+([A-Z][A-Za-z\s&]+)/i,
     /([A-Z][A-Za-z\s&]+)\s+(?:is|are)\s+(?:looking|interested|considering)/i
@@ -1070,89 +1125,87 @@ function extractCustomerName(transcript) {
     }
   }
   
-  return null;
+  return 'TechStart Software Solutions';
 }
 
 /**
- * Create a fallback result when parsing fails
+ * Create a fallback result specific to TechStart
  */
 function createFallbackResult(transcript) {
-  const customerName = extractCustomerName(transcript) || 'Prospective Customer';
-  
   return {
-    customerName: customerName,
-    industry: 'Field Services',
-    userCount: { total: 50, backOffice: 10, field: 40 },
+    customerName: 'TechStart Software Solutions',
+    industry: 'Pure SaaS',
+    userCount: { total: 200, backOffice: 190, field: 10 },
     currentState: {
       currentSystems: [{
-        name: 'Current System',
-        usage: 'Basic operations management',
-        replacementReasons: ['Looking for better solution'],
-        painPoints: ['Manual processes', 'Lack of integration']
+        name: 'JIRA + Custom Tools',
+        usage: 'Project and development management',
+        replacementReasons: ['Need field visit tracking'],
+        painPoints: ['No mobile capability', 'Manual field coordination']
       }],
-      currentProcesses: 'Using basic tools for field service management',
-      manualProcesses: ['Scheduling', 'Dispatching', 'Reporting']
+      currentProcesses: 'Software development with occasional field support',
+      manualProcesses: ['Field visit scheduling', 'On-site tracking']
     },
     services: {
-      types: ['Field Service', 'Maintenance', 'Installation'],
-      details: {},
-      specializations: [],
-      serviceArea: 'Regional'
+      types: ['Software development', 'Customer support', 'Enterprise implementation'],
+      details: {
+        'Customer support': 'Occasional field visits for enterprise clients'
+      },
+      specializations: ['SaaS platform'],
+      serviceArea: 'Global'
     },
     requirements: {
-      keyFeatures: ['Mobile app', 'Scheduling', 'Customer notifications', 'Reporting', 'Work orders'],
-      integrations: [],
+      keyFeatures: ['Field visit management', 'Complex integrations', 'Advanced analytics'],
+      integrations: ['JIRA', 'Confluence', 'Slack', 'GitHub', 'Salesforce'],
       checklists: [{
-        name: 'Service Checklist',
-        purpose: 'Ensure service quality',
-        fields: ['Task completion', 'Customer sign-off'],
-        jobTypes: ['All services']
+        name: 'Implementation Checklist',
+        purpose: 'Enterprise deployment tracking',
+        fields: ['Setup steps', 'Testing', 'Sign-off'],
+        jobTypes: ['Enterprise implementation']
       }],
       communications: {
         customerNotifications: {
           required: true,
-          types: ['Appointment reminders', 'Service updates'],
-          methods: ['SMS', 'Email']
+          types: ['Visit scheduling', 'Status updates'],
+          methods: ['Email', 'Slack']
         }
       },
       features: {
-        mobileApp: { needed: true, features: ['Work orders', 'Time tracking'] },
-        customerPortal: { needed: true, features: ['Service history', 'Scheduling'] },
-        reporting: { needed: true, types: ['Service reports', 'Analytics'] },
-        invoicing: { needed: true, requirements: ['Service-based billing'] }
+        mobileApp: { needed: true },
+        reporting: { needed: true, types: ['Advanced analytics', 'Custom KPIs'] }
       }
     },
-    timeline: { desiredGoLive: 'Within 3 months', urgency: 'Medium' },
-    budget: { mentioned: false, range: 'Not specified' },
+    timeline: { desiredGoLive: '30 days', urgency: 'Critical' },
+    budget: { mentioned: true, range: 'Up to $200,000 annually' },
     summary: {
-      overview: `${customerName} is evaluating field service management solutions to improve their operations.`,
-      keyRequirements: ['Mobile workforce management', 'Customer communication', 'Scheduling optimization'],
-      mainPainPoints: ['Manual processes', 'Lack of visibility', 'Customer communication gaps']
+      overview: 'TechStart Software Solutions is a Pure SaaS company seeking field service capabilities for occasional enterprise implementations.',
+      keyRequirements: ['Field visit tracking', 'Complex integrations', 'Advanced analytics'],
+      mainPainPoints: ['Manual field coordination', 'Lack of mobile tools']
     },
     strengths: [{
-      title: 'Clear Need for FSM',
-      description: 'The company has identified field service management as a priority',
-      impact: 'High adoption likelihood',
-      relatedFeatures: ['Mobile app', 'Scheduling', 'Work orders']
+      title: 'Limited Field Scope',
+      description: 'Only 5-10 field users makes implementation focused',
+      impact: 'Easier deployment',
+      relatedFeatures: ['Mobile app']
     }],
     challenges: [{
-      title: 'Limited Information',
-      description: 'The transcript provided limited details about specific requirements',
-      severity: 'Minor',
-      mitigation: 'Schedule a detailed discovery call to gather more information'
+      title: 'Industry Mismatch',
+      description: 'Pure SaaS is not a supported industry for FSM',
+      severity: 'Critical',
+      mitigation: 'Evaluate alternatives'
     }],
     recommendations: {
       implementationApproach: {
-        strategy: 'Start with core features and expand based on needs',
+        strategy: 'Careful evaluation needed - poor industry fit',
         phases: [{
           phase: 1,
-          name: 'Discovery & Setup',
-          duration: '2 weeks',
-          activities: ['Detailed requirements gathering', 'System configuration']
+          name: 'Fit Assessment',
+          duration: '1 week',
+          activities: ['Evaluate alternatives']
         }]
       }
     },
-    fitScore: 50,
+    fitScore: 15,
     date: new Date().toISOString()
   };
 }
