@@ -95,10 +95,25 @@ function createEnhancedPrompt(transcriptText, historicalData, criteriaData) {
 You are an expert system analyzing a meeting transcript for Zuper, a field service management software company.
 
 CRITICAL INSTRUCTIONS:
-1. Extract EVERY piece of information from the transcript
+1. Extract EVERY piece of information from the transcript - DO NOT use generic placeholders
 2. Be honest about fit - if the company is not suitable for field service management, give a LOW fit score
 3. Return ONLY valid JSON without any other text
 4. For companies with minimal field operations (<20% field workers), fit score should be BELOW 30
+5. NEVER use generic text like "Clear understanding of needs" or "Standard implementation"
+6. ALL content must be SPECIFIC to what was said in the transcript
+7. If something wasn't mentioned, leave the array empty rather than adding generic content
+
+EXAMPLE OF BAD GENERIC CONTENT (DO NOT DO THIS):
+- "Clear understanding of needs" 
+- "Standard implementation"
+- "Requirements defined"
+- "Typical deployment considerations"
+
+EXAMPLE OF GOOD SPECIFIC CONTENT:
+- "Need to track cleaner arrivals/departures at each client site"
+- "CleanTrack software lacks mobile capabilities"
+- "Route optimization critical for minimizing travel between client sites"
+- "100 field cleaners working at multiple locations daily"
 
 ${criteriaData}
 
@@ -130,15 +145,15 @@ Return a JSON object with this EXACT structure:
   "currentState": {
     "currentSystems": [
       {
-        "name": "System name if mentioned",
+        "name": "Extract EXACT system name mentioned (CleanTrack in this case)",
         "type": "System type",
-        "usage": "What they use it for",
-        "replacementReasons": ["Exact reasons mentioned"],
-        "painPoints": ["Specific issues mentioned"]
+        "usage": "EXACTLY what they said they use it for",
+        "replacementReasons": ["EXACT reasons they gave for wanting to replace"],
+        "painPoints": ["SPECIFIC pain points mentioned - e.g. 'no mobile capabilities'"]
       }
     ],
-    "currentProcesses": "Describe their current processes",
-    "manualProcesses": ["List manual tasks mentioned"]
+    "currentProcesses": "Describe their EXACT current processes from transcript",
+    "manualProcesses": ["List SPECIFIC manual tasks they mentioned"]
   },
   "services": {
     "types": ["List exact services mentioned"],
@@ -308,6 +323,13 @@ function processOpenAIResponse(response) {
     
     // Parse the JSON
     const analysisResults = JSON.parse(jsonContent);
+    
+    // Log the actual OpenAI results for debugging
+    console.log('=== OPENAI ANALYSIS RESULTS ===');
+    console.log('Summary:', JSON.stringify(analysisResults.summary, null, 2));
+    console.log('Strengths:', JSON.stringify(analysisResults.strengths, null, 2));
+    console.log('Challenges:', JSON.stringify(analysisResults.challenges, null, 2));
+    console.log('Current State:', JSON.stringify(analysisResults.currentState, null, 2));
     
     // Return EXACTLY what OpenAI gave us, just ensure basic structure
     return {
