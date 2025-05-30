@@ -314,12 +314,7 @@ const StrengthsChallengesTab = ({ data }) => (
     <div>
       <h3 className="text-lg font-semibold mb-4">Key Strengths</h3>
       <div className="space-y-4">
-        {(data.strengths?.length > 0 ? data.strengths : [{
-          title: 'Requirements Defined',
-          description: 'Clear understanding of needs',
-          impact: 'Focused implementation',
-          relatedFeatures: ['Core features']
-        }]).map((strength, idx) => (
+        {data.strengths?.map((strength, idx) => (
           <div key={idx} className="border-l-4 border-green-500 pl-4">
             <h4 className="font-medium flex items-center mb-1">
               <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
