@@ -1,5 +1,3 @@
-// Enhanced ComprehensiveAnalysisDisplay.jsx with Summary Card
-
 import React, { useState } from 'react';
 import { 
   CheckCircle, AlertTriangle, XCircle, Users, Building, 
@@ -238,26 +236,29 @@ const MetricBar = ({ label, level, value, reverse = false }) => {
   );
 };
 
-// Summary Tab Component - Fixed with actual data
+// Summary Tab Component - Show actual data only
 const SummaryTab = ({ data }) => {
-  // Ensure we have data even if it's missing
-  const overview = data.summary?.overview || 
-    `${data.customerName} is a ${data.industry} company with ${data.userCount?.total || 0} total users. They are evaluating field service management solutions for their specific needs.`;
-  
-  const keyRequirements = data.summary?.keyRequirements || 
-    data.requirements?.keyFeatures || 
-    ['No specific requirements captured'];
-    
-  const mainPainPoints = data.summary?.mainPainPoints || 
-    data.currentState?.currentSystems?.[0]?.painPoints ||
-    ['No pain points identified'];
+  // Use actual data, don't provide defaults
+  const overview = data.summary?.overview || '';
+  const keyRequirements = data.requirements?.keyFeatures || [];
+  const mainPainPoints = data.summary?.mainPainPoints || [];
+
+  if (!overview && keyRequirements.length === 0 && mainPainPoints.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <p>No summary data available</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Overview</h3>
-        <p className="text-gray-700">{overview}</p>
-      </div>
+      {overview && (
+        <div>
+          <h3 className="text-lg font-semibold mb-3">Overview</h3>
+          <p className="text-gray-700">{overview}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
@@ -270,8 +271,15 @@ const SummaryTab = ({ data }) => {
               <div key={idx}>
                 <p className="font-medium">{system.name}</p>
                 <p className="text-sm text-gray-600">{system.usage}</p>
+                {system.painPoints?.length > 0 && (
+                  <ul className="text-sm text-red-600 mt-1">
+                    {system.painPoints.map((pain, i) => (
+                      <li key={i}>• {pain}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            )) || <p className="text-gray-600">No current systems documented</p>}
+            )) || <p className="text-gray-600">No current systems information</p>}
           </div>
         </div>
 
@@ -281,108 +289,133 @@ const SummaryTab = ({ data }) => {
             Key Requirements
           </h4>
           <div className="bg-gray-50 p-4 rounded-lg">
-            <ul className="space-y-2">
-              {keyRequirements.slice(0, 5).map((req, idx) => (
-                <li key={idx} className="flex items-start">
-                  <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
-                  <span className="text-sm">{req}</span>
-                </li>
-              ))}
-            </ul>
+            {keyRequirements.length > 0 ? (
+              <ul className="space-y-2">
+                {keyRequirements.map((req, idx) => (
+                  <li key={idx} className="flex items-start">
+                    <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
+                    <span className="text-sm">{req}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-600 text-sm">No specific requirements listed</p>
+            )}
           </div>
         </div>
       </div>
 
-      <div>
-        <h4 className="font-medium mb-3">Main Pain Points</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {mainPainPoints.map((pain, idx) => (
-            <div key={idx} className="flex items-start bg-red-50 p-3 rounded">
-              <AlertTriangle className="h-4 w-4 text-red-500 mr-2 mt-0.5" />
-              <span className="text-sm">{pain}</span>
-            </div>
-          ))}
+      {mainPainPoints.length > 0 && (
+        <div>
+          <h4 className="font-medium mb-3">Main Pain Points</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {mainPainPoints.map((pain, idx) => (
+              <div key={idx} className="flex items-start bg-red-50 p-3 rounded">
+                <AlertTriangle className="h-4 w-4 text-red-500 mr-2 mt-0.5" />
+                <span className="text-sm">{pain}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
 
-// Strengths & Challenges Tab
-const StrengthsChallengesTab = ({ data }) => (
-  <div className="space-y-6">
-    <div>
-      <h3 className="text-lg font-semibold mb-4">Key Strengths</h3>
-      <div className="space-y-4">
-        {data.strengths?.map((strength, idx) => (
-          <div key={idx} className="border-l-4 border-green-500 pl-4">
-            <h4 className="font-medium flex items-center mb-1">
-              <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
-              {strength.title}
-            </h4>
-            <p className="text-gray-700 mb-2">{strength.description}</p>
-            <p className="text-sm text-gray-600">
-              <strong>Impact:</strong> {strength.impact}
-            </p>
-            {strength.relatedFeatures?.length > 0 && (
-              <div className="mt-2">
-                <span className="text-sm font-medium">Related Features: </span>
-                <span className="text-sm text-blue-600">
-                  {strength.relatedFeatures.join(', ')}
-                </span>
-              </div>
-            )}
-          </div>
-        ))}
+// Strengths & Challenges Tab - Show actual data only
+const StrengthsChallengesTab = ({ data }) => {
+  const hasContent = (data.strengths?.length > 0) || (data.challenges?.length > 0);
+  
+  if (!hasContent) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <p>No strengths or challenges analysis available</p>
       </div>
-    </div>
+    );
+  }
 
-    <div>
-      <h3 className="text-lg font-semibold mb-4">Potential Challenges</h3>
-      <div className="space-y-4">
-        {(data.challenges?.length > 0 ? data.challenges : [{
-          title: 'Standard Implementation',
-          description: 'Typical deployment considerations',
-          severity: 'Minor',
-          mitigation: 'Follow best practices'
-        }]).map((challenge, idx) => (
-          <div key={idx} className={`border-l-4 pl-4 ${
-            challenge.severity === 'Critical' ? 'border-red-500' :
-            challenge.severity === 'Major' ? 'border-yellow-500' :
-            'border-gray-400'
-          }`}>
-            <h4 className="font-medium flex items-center mb-1">
-              <AlertTriangle className={`h-5 w-5 mr-2 ${
-                challenge.severity === 'Critical' ? 'text-red-600' :
-                challenge.severity === 'Major' ? 'text-yellow-600' :
-                'text-gray-600'
-              }`} />
-              {challenge.title}
-              <span className={`ml-2 text-xs px-2 py-1 rounded ${
-                challenge.severity === 'Critical' ? 'bg-red-100 text-red-700' :
-                challenge.severity === 'Major' ? 'bg-yellow-100 text-yellow-700' :
-                'bg-gray-100 text-gray-700'
-              }`}>
-                {challenge.severity}
-              </span>
-            </h4>
-            <p className="text-gray-700 mb-2">{challenge.description}</p>
-            <p className="text-sm text-gray-600">
-              <strong>Mitigation:</strong> {challenge.mitigation}
-            </p>
+  return (
+    <div className="space-y-6">
+      {data.strengths?.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold mb-4">Key Strengths</h3>
+          <div className="space-y-4">
+            {data.strengths.map((strength, idx) => (
+              <div key={idx} className="border-l-4 border-green-500 pl-4">
+                <h4 className="font-medium flex items-center mb-1">
+                  <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+                  {strength.title}
+                </h4>
+                <p className="text-gray-700 mb-2">{strength.description}</p>
+                <p className="text-sm text-gray-600">
+                  <strong>Impact:</strong> {strength.impact}
+                </p>
+                {strength.relatedFeatures?.length > 0 && (
+                  <div className="mt-2">
+                    <span className="text-sm font-medium">Related Features: </span>
+                    <span className="text-sm text-blue-600">
+                      {strength.relatedFeatures.join(', ')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {data.challenges?.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold mb-4">Potential Challenges</h3>
+          <div className="space-y-4">
+            {data.challenges.map((challenge, idx) => (
+              <div key={idx} className={`border-l-4 pl-4 ${
+                challenge.severity === 'Critical' ? 'border-red-500' :
+                challenge.severity === 'Major' ? 'border-yellow-500' :
+                'border-gray-400'
+              }`}>
+                <h4 className="font-medium flex items-center mb-1">
+                  <AlertTriangle className={`h-5 w-5 mr-2 ${
+                    challenge.severity === 'Critical' ? 'text-red-600' :
+                    challenge.severity === 'Major' ? 'text-yellow-600' :
+                    'text-gray-600'
+                  }`} />
+                  {challenge.title}
+                  <span className={`ml-2 text-xs px-2 py-1 rounded ${
+                    challenge.severity === 'Critical' ? 'bg-red-100 text-red-700' :
+                    challenge.severity === 'Major' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {challenge.severity}
+                  </span>
+                </h4>
+                <p className="text-gray-700 mb-2">{challenge.description}</p>
+                <p className="text-sm text-gray-600">
+                  <strong>Mitigation:</strong> {challenge.mitigation}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 // Similar Customers Tab
-const SimilarCustomersTab = ({ data }) => (
-  <div className="space-y-6">
-    <h3 className="text-lg font-semibold">Similar Customer Implementations</h3>
-    {data.similarCustomers?.length > 0 ? (
-      data.similarCustomers.map((customer, idx) => (
+const SimilarCustomersTab = ({ data }) => {
+  if (!data.similarCustomers || data.similarCustomers.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <p>No similar customer data available</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <h3 className="text-lg font-semibold">Similar Customer Implementations</h3>
+      {data.similarCustomers.map((customer, idx) => (
         <div key={idx} className="border rounded-lg p-5 hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start mb-3">
             <div>
@@ -441,18 +474,25 @@ const SimilarCustomersTab = ({ data }) => (
             </div>
           )}
         </div>
-      ))
-    ) : (
-      <div className="text-center py-8 text-gray-500">
-        <p>No similar customer data available</p>
-      </div>
-    )}
-  </div>
-);
+      ))}
+    </div>
+  );
+};
 
 // Requirements Tab
 const RequirementsTab = ({ data }) => {
   const isPoorFit = data.fitScore < 30;
+  const hasRequirements = (data.services?.types?.length > 0) || 
+                         (data.requirements?.keyFeatures?.length > 0) || 
+                         (data.requirements?.integrations?.length > 0);
+
+  if (!hasRequirements) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <p>No requirements data available</p>
+      </div>
+    );
+  }
   
   return (
     <div className="space-y-6">
@@ -470,29 +510,33 @@ const RequirementsTab = ({ data }) => {
         </div>
       )}
       
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Service Types</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {data.services?.types?.map((service, idx) => (
-            <div key={idx} className="flex items-center">
-              <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
-              <span>{service}</span>
-            </div>
-          ))}
+      {data.services?.types?.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold mb-3">Service Types</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {data.services.types.map((service, idx) => (
+              <div key={idx} className="flex items-center">
+                <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                <span>{service}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Key Requirements</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {(data.requirements?.keyFeatures || []).map((req, idx) => (
-            <div key={idx} className="flex items-start bg-blue-50 p-3 rounded">
-              <Check className="h-4 w-4 text-blue-600 mr-2 mt-0.5" />
-              <span className="text-sm">{req}</span>
-            </div>
-          ))}
+      {data.requirements?.keyFeatures?.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold mb-3">Key Requirements</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {data.requirements.keyFeatures.map((req, idx) => (
+              <div key={idx} className="flex items-start bg-blue-50 p-3 rounded">
+                <Check className="h-4 w-4 text-blue-600 mr-2 mt-0.5" />
+                <span className="text-sm">{req}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {data.requirements?.integrations?.length > 0 && (
         <div>
@@ -524,9 +568,11 @@ const RequirementsTab = ({ data }) => {
 
 // Recommendations Tab
 const RecommendationsTab = ({ data }) => {
-  const hasRecommendations = data.recommendations && 
-    data.recommendations.implementationApproach && 
-    data.recommendations.implementationApproach.strategy;
+  const hasRecommendations = data.recommendations && (
+    data.recommendations.implementationApproach?.strategy ||
+    data.recommendations.integrationStrategy?.approach ||
+    data.recommendations.trainingRecommendations?.length > 0
+  );
     
   if (!hasRecommendations) {
     return (
@@ -538,26 +584,73 @@ const RecommendationsTab = ({ data }) => {
   
   return (
     <div className="space-y-6">
-      <div className="bg-blue-50 p-4 rounded-lg">
-        <p className="text-blue-800">
-          {data.recommendations.implementationApproach.strategy}
-        </p>
-      </div>
+      {data.recommendations.implementationApproach?.strategy && (
+        <>
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <p className="text-blue-800">
+              {data.recommendations.implementationApproach.strategy}
+            </p>
+          </div>
 
-      {data.recommendations.implementationApproach.phases?.length > 0 && (
+          {data.recommendations.implementationApproach.phases?.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold mb-3">Implementation Phases</h3>
+              <div className="space-y-3">
+                {data.recommendations.implementationApproach.phases.map((phase, idx) => (
+                  <div key={idx} className="border-l-4 border-blue-500 pl-4">
+                    <h4 className="font-medium">Phase {phase.phase}: {phase.name}</h4>
+                    <p className="text-sm text-gray-600">Duration: {phase.duration}</p>
+                    {phase.activities?.length > 0 && (
+                      <ul className="text-sm mt-2 space-y-1">
+                        {phase.activities.map((activity, i) => (
+                          <li key={i}>• {activity}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {data.recommendations.integrationStrategy && (
         <div>
-          <h3 className="text-lg font-semibold mb-3">Implementation Phases</h3>
-          <div className="space-y-3">
-            {data.recommendations.implementationApproach.phases.map((phase, idx) => (
-              <div key={idx} className="border-l-4 border-blue-500 pl-4">
-                <h4 className="font-medium">Phase {phase.phase}: {phase.name}</h4>
-                <p className="text-sm text-gray-600">Duration: {phase.duration}</p>
-                {phase.activities?.length > 0 && (
-                  <ul className="text-sm mt-2 space-y-1">
-                    {phase.activities.map((activity, i) => (
-                      <li key={i}>• {activity}</li>
-                    ))}
-                  </ul>
+          <h3 className="text-lg font-semibold mb-3">Integration Strategy</h3>
+          <p className="text-gray-700 mb-3">{data.recommendations.integrationStrategy.approach}</p>
+          {data.recommendations.integrationStrategy.details?.length > 0 && (
+            <div className="space-y-2">
+              {data.recommendations.integrationStrategy.details.map((detail, idx) => (
+                <div key={idx} className="bg-gray-50 p-3 rounded">
+                  <p className="font-medium">{detail.integration}</p>
+                  <p className="text-sm text-gray-600">Method: {detail.method}</p>
+                  <p className="text-sm text-gray-600">Timeline: {detail.timeline}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {data.recommendations.trainingRecommendations?.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold mb-3">Training Recommendations</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {data.recommendations.trainingRecommendations.map((training, idx) => (
+              <div key={idx} className="border rounded-lg p-4">
+                <h4 className="font-medium mb-2">{training.audience}</h4>
+                <p className="text-sm text-gray-600 mb-2">Duration: {training.duration}</p>
+                <p className="text-sm text-gray-600 mb-2">Method: {training.method}</p>
+                {training.topics?.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium mb-1">Topics:</p>
+                    <ul className="text-sm text-gray-600">
+                      {training.topics.map((topic, i) => (
+                        <li key={i}>• {topic}</li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
             ))}
