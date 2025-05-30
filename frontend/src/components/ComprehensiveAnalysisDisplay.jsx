@@ -191,15 +191,15 @@ const ComprehensiveAnalysisDisplay = ({ analysisResults }) => {
 };
 
 // Metric Bar Component
-const MetricBar = ({ label, level, value, reverse = false }) => {
+const MetricBar = ({ label, level, value, reverse = false, explanation, factors }) => {
+  const [showDetails, setShowDetails] = useState(false);
+  
   const getColor = () => {
     if (reverse) {
-      // For metrics where high is bad (complexity, risk)
       if (level === 'high') return 'bg-red-500';
       if (level === 'medium' || level === 'moderate') return 'bg-yellow-500';
       return 'bg-green-500';
     } else {
-      // For metrics where high is good (success, feature match)
       if (level === 'high' || level === 'excellent') return 'bg-green-500';
       if (level === 'medium' || level === 'good' || level === 'moderate') return 'bg-yellow-500';
       return 'bg-red-500';
@@ -219,18 +219,106 @@ const MetricBar = ({ label, level, value, reverse = false }) => {
   };
 
   return (
-    <div className="flex items-center">
-      <div className="w-40 text-sm font-medium text-gray-700">{label}</div>
-      <div className="flex-1 mx-4">
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          <div 
-            className={`h-2 rounded-full ${getColor()}`} 
-            style={{ width: `${value}%` }}
-          />
+    <div className="space-y-2">
+      <div className="flex items-center">
+        <div className="w-40 text-sm font-medium text-gray-700">{label}</div>
+        <div className="flex-1 mx-4">
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div 
+              className={`h-2 rounded-full ${getColor()}`} 
+              style={{ width: `${value}%` }}
+            />
+          </div>
         </div>
+        <div className={`text-sm font-medium ${getLabelColor()} capitalize w-20 text-right`}>
+          {level}
+        </div>
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="ml-2 text-gray-400 hover:text-gray-600"
+        >
+          <AlertCircle className="h-4 w-4" />
+        </button>
       </div>
-      <div className={`text-sm font-medium ${getLabelColor()} capitalize w-20 text-right`}>
-        {level}
+      
+      {showDetails && (
+        <div className="ml-40 bg-gray-50 rounded p-3 text-sm">
+          <p className="font-medium mb-1">Why {level}?</p>
+          <p className="text-gray-600 mb-2">{explanation}</p>
+          {factors && factors.length > 0 && (
+            <>
+              <p className="font-medium mb-1">Key Factors:</p>
+              <ul className="text-gray-600 space-y-1">
+                {factors.map((factor, idx) => (
+                  <li key={idx} className="flex items-start">
+                    <span className={`mr-2 ${factor.positive ? 'text-green-600' : 'text-red-600'}`}>
+                      {factor.positive ? '+' : '-'}
+                    </span>
+                    {factor.text}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ActionableInsights = ({ analysisResults, metrics }) => {
+  const criticalActions = [];
+  
+  // Based on metrics, generate specific actions
+  if (metrics.successProbability.level === 'low') {
+    criticalActions.push({
+      priority: 'High',
+      action: 'Schedule qualification call to validate field service needs',
+      reason: 'Low fit score indicates potential mismatch',
+      owner: 'Sales Team'
+    });
+  }
+  
+  if (metrics.implementationTime.level === 'high') {
+    criticalActions.push({
+      priority: 'High',
+      action: 'Involve integration specialist early in sales process',
+      reason: `${analysisResults.requirements?.integrations?.length} complex integrations identified`,
+      owner: 'Technical Team'
+    });
+  }
+  
+  if (analysisResults.industry && !['hvac', 'plumbing', 'electrical', 'roofing'].some(i => 
+    analysisResults.industry.toLowerCase().includes(i))) {
+    criticalActions.push({
+      priority: 'Medium',
+      action: 'Verify industry-specific requirements are supportable',
+      reason: 'Customer in non-core vertical',
+      owner: 'Product Team'
+    });
+  }
+  
+  return (
+    <div className="bg-blue-50 rounded-lg p-6 mt-6">
+      <h3 className="text-lg font-semibold mb-4 flex items-center">
+        <Zap className="h-5 w-5 mr-2 text-blue-600" />
+        Actionable Next Steps
+      </h3>
+      <div className="space-y-3">
+        {criticalActions.map((action, idx) => (
+          <div key={idx} className="bg-white rounded p-4 border border-blue-200">
+            <div className="flex justify-between items-start mb-2">
+              <h4 className="font-medium">{action.action}</h4>
+              <span className={`text-xs px-2 py-1 rounded ${
+                action.priority === 'High' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+              }`}>
+                {action.priority} Priority
+              </span>
+            </div>
+            <p className="text-sm text-gray-600 mb-1">Reason: {action.reason}</p>
+            <p className="text-sm font-medium">Owner: {action.owner}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
