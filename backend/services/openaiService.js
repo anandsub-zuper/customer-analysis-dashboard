@@ -54,34 +54,32 @@ const openaiService = {
         }
       }
       
-      // 6. Process the response with better error handling
-      const result = processOpenAIResponse(response, text);
+      // 6. Process the response - NO FALLBACK
+      const result = processOpenAIResponse(response);
       console.log('Successfully processed OpenAI response.');
       console.log('Extracted customer name:', result.customerName);
       console.log('Extracted industry:', result.industry);
       console.log('Extracted user count:', result.userCount);
+      console.log('Fit Score from OpenAI:', result.fitScore);
       
-      // 7. Apply criteria adjustments
+      // 7. Apply criteria adjustments to the fit score ONLY
       const adjustedResult = applyComprehensiveCriteriaAdjustments(result, criteria);
       
-      // 8. CRITICAL FIX: Ensure complete analysis BEFORE finding similar customers
-      const completeResult = ensureCompleteAnalysis(adjustedResult);
+      // 8. Find REAL similar customers (don't create fake ones)
+      const enrichedResult = enrichWithSimilarCustomers(adjustedResult, historicalData);
       
-      // 9. Find similar customers with PROPER matching
-      const enrichedResult = enrichWithSimilarCustomers(completeResult, historicalData);
+      // 9. Minimal structure validation (don't overwrite with defaults)
+      const validatedResult = validateMinimalStructure(enrichedResult);
       
-      // 10. FINAL FIX: Ensure UI-ready structure with all content
-      const uiReadyResult = fixDataStructureForUI(enrichedResult);
-      
-      // 11. VALIDATION: Log final structure to ensure completeness
+      // 10. Log final result
       console.log('=== FINAL RESULT VALIDATION ===');
-      console.log('Summary Overview:', uiReadyResult.summary?.overview ? 'Present' : 'MISSING');
-      console.log('Strengths Count:', uiReadyResult.strengths?.length || 0);
-      console.log('Challenges Count:', uiReadyResult.challenges?.length || 0);
-      console.log('Similar Customers Count:', uiReadyResult.similarCustomers?.length || 0);
-      console.log('Recommendations Present:', !!uiReadyResult.recommendations?.implementationApproach?.strategy);
+      console.log('Customer Name:', validatedResult.customerName);
+      console.log('Industry:', validatedResult.industry);
+      console.log('Final Fit Score:', validatedResult.fitScore);
+      console.log('Strengths Count:', validatedResult.strengths?.length || 0);
+      console.log('Challenges Count:', validatedResult.challenges?.length || 0);
       
-      return uiReadyResult;
+      return validatedResult;
     } catch (error) {
       console.error('Error analyzing transcript with OpenAI:', error);
       throw new Error(`Failed to analyze transcript: ${error.message}`);
@@ -97,12 +95,21 @@ function createEnhancedPrompt(transcriptText, historicalData, criteriaData) {
 You are an expert system analyzing a meeting transcript for Zuper, a field service management software company.
 
 CRITICAL INSTRUCTIONS:
-1. Extract EVERY piece of information from the transcript, even if limited
-2. Make reasonable inferences based on context
+1. Extract EVERY piece of information from the transcript
+2. Be honest about fit - if the company is not suitable for field service management, give a LOW fit score
 3. Return ONLY valid JSON without any other text
-4. Fill all fields with appropriate values, never leave empty
+4. For companies with minimal field operations (<20% field workers), fit score should be BELOW 30
 
 ${criteriaData}
+
+IMPORTANT SCORING RULES:
+- Industries in the PREFERRED list: Score 60-85
+- Industries NOT in the preferred list (like cleaning, landscaping, etc.): Score 40-60
+- Industries in the BLACKLISTED list: Maximum score 25
+- Pure software/SaaS companies with <10% field workers: Maximum score 20
+- Companies needing complex project management or ERP: Reduce score by 30 points
+- Companies with >5 complex integrations: Reduce score by 20 points
+- Focus on FIELD SERVICE operations, not general business management
 
 Analyze this transcript and extract all relevant information:
 
@@ -110,31 +117,31 @@ Analyze this transcript and extract all relevant information:
 ${transcriptText}
 """
 
-Return a JSON object with this EXACT structure (fill ALL fields):
+Return a JSON object with this EXACT structure:
 
 {
-  "customerName": "Extract company name or use 'Prospective Customer' if not found",
-  "industry": "Extract industry or infer from context",
+  "customerName": "Extract exact company name from transcript",
+  "industry": "Extract exact industry mentioned",
   "userCount": {
-    "total": "Extract number or estimate based on company size mentions",
-    "backOffice": "Extract or estimate office staff",
-    "field": "Extract or estimate field staff"
+    "total": extract number,
+    "backOffice": extract number,
+    "field": extract number
   },
   "currentState": {
     "currentSystems": [
       {
-        "name": "System name",
+        "name": "System name if mentioned",
         "type": "System type",
         "usage": "What they use it for",
-        "replacementReasons": ["List all pain points mentioned"],
-        "painPoints": ["Specific issues"]
+        "replacementReasons": ["Exact reasons mentioned"],
+        "painPoints": ["Specific issues mentioned"]
       }
     ],
-    "currentProcesses": "Describe how they operate now",
+    "currentProcesses": "Describe their current processes",
     "manualProcesses": ["List manual tasks mentioned"]
   },
   "services": {
-    "types": ["List all services mentioned or implied"],
+    "types": ["List exact services mentioned"],
     "details": {
       "Service Type": "Details about this service"
     },
@@ -142,450 +149,303 @@ Return a JSON object with this EXACT structure (fill ALL fields):
     "serviceArea": "Geographic coverage if mentioned"
   },
   "requirements": {
-    "keyFeatures": ["List all key features they need"],
-    "checklists": [
-      {
-        "name": "Checklist name",
-        "purpose": "What it's for",
-        "fields": ["Fields mentioned"],
-        "jobTypes": ["Related job types"]
-      }
-    ],
+    "keyFeatures": ["List ALL features they explicitly asked for"],
+    "checklists": [],
     "communications": {
       "customerNotifications": {
-        "required": true,
-        "types": ["List all notification types mentioned"],
-        "methods": ["SMS", "Email", "etc"],
-        "triggers": ["When notifications are sent"]
+        "required": false/true based on transcript,
+        "types": ["Types if mentioned"],
+        "methods": ["Methods if mentioned"],
+        "triggers": ["Triggers if mentioned"]
       }
     },
     "integrations": [
       {
-        "system": "System name",
-        "type": "CRM/Accounting/etc",
-        "purpose": "Why needed",
-        "dataFlow": "What data syncs",
+        "system": "Exact system name mentioned",
+        "type": "Type of system",
+        "purpose": "Why they need it",
+        "dataFlow": "What data needs to sync",
         "priority": "Critical/Important/Nice-to-have",
         "complexity": "Standard/Complex/Custom"
       }
     ],
     "features": {
       "scheduling": {
-        "needed": true,
-        "requirements": ["Specific needs"]
+        "needed": true/false,
+        "requirements": ["Specific requirements"]
       },
       "mobileApp": {
-        "needed": true,
-        "features": ["Required mobile features"]
+        "needed": true/false,
+        "features": ["Required features"]
       },
       "customerPortal": {
-        "needed": true,
+        "needed": true/false,
         "features": ["Portal requirements"]
       },
       "reporting": {
-        "needed": true,
+        "needed": true/false,
         "types": ["Report types needed"]
       },
       "invoicing": {
-        "needed": true,
+        "needed": true/false,
         "requirements": ["Invoicing needs"]
       }
     }
   },
   "timeline": {
-    "desiredGoLive": "Extract timeline or use 'ASAP'",
-    "urgency": "High/Medium/Low",
-    "constraints": ["Any timeline constraints"]
+    "desiredGoLive": "Extract exact timeline mentioned",
+    "urgency": "High/Medium/Low based on their statements",
+    "constraints": ["Any constraints mentioned"]
   },
   "budget": {
-    "mentioned": false,
-    "range": "Extract if mentioned",
+    "mentioned": true/false,
+    "range": "Extract exact budget if mentioned",
     "constraints": ["Budget limitations"]
   },
   "summary": {
-    "overview": "2-3 sentence summary of the prospect",
-    "keyRequirements": ["Top 5 most important requirements"],
-    "mainPainPoints": ["Primary problems they want to solve"]
+    "overview": "Accurate 2-3 sentence summary based on the transcript",
+    "keyRequirements": ["Their TOP requirements from the transcript"],
+    "mainPainPoints": ["Their actual pain points mentioned"]
   },
   "strengths": [
     {
-      "title": "Strong alignment area",
-      "description": "Why this is a strength for Zuper",
-      "impact": "Business impact",
-      "relatedFeatures": ["Zuper features that address this"]
+      "title": "ONLY list if Zuper genuinely addresses their needs",
+      "description": "Be specific about why",
+      "impact": "Real business impact",
+      "relatedFeatures": ["Zuper features that help"]
     }
   ],
   "challenges": [
     {
-      "title": "Potential challenge",
-      "description": "Why this might be challenging",
+      "title": "Be honest about mismatches",
+      "description": "Why Zuper might not be suitable",
       "severity": "Critical/Major/Minor",
-      "mitigation": "How to address it"
+      "mitigation": "Honest assessment of how to address"
     }
   ],
   "recommendations": {
     "implementationApproach": {
-      "strategy": "Recommended approach",
+      "strategy": "If fit score <30, recommend they consider alternatives. Otherwise provide real strategy",
       "phases": [
         {
           "phase": 1,
           "name": "Phase name",
-          "duration": "2-4 weeks",
-          "activities": ["Key activities"]
+          "duration": "Realistic duration",
+          "activities": ["Real activities needed"]
         }
       ]
     },
     "integrationStrategy": {
-      "approach": "Integration approach",
+      "approach": "Based on their actual integration needs",
       "details": [
         {
           "integration": "System name",
-          "method": "API/File/etc",
-          "timeline": "Week 1-2"
+          "method": "Integration method",
+          "timeline": "Realistic timeline"
         }
       ]
     },
     "trainingRecommendations": [
       {
-        "audience": "User group",
-        "topics": ["Training topics"],
-        "duration": "X hours",
-        "method": "Virtual/In-person"
+        "audience": "Based on their user types",
+        "topics": ["Relevant training topics"],
+        "duration": "Realistic duration",
+        "method": "Appropriate method"
       }
     ]
   },
-  "fitScore": 0
-}
-
-IMPORTANT: Extract and infer as much as possible from the transcript. If information is not explicitly stated, make reasonable assumptions based on context.`;
+  "fitScore": BE HONEST - for software companies with minimal field ops, this should be VERY LOW (under 30)
+}`;
 }
 
 /**
- * Format criteria for the prompt (simplified)
+ * Format criteria for the prompt
  */
 function formatCriteriaForPrompt(criteria) {
   return `
 ## ZUPER PLATFORM CRITERIA
 
-SUPPORTED INDUSTRIES: ${criteria.industries.whitelist.join(', ')}
-UNSUPPORTED INDUSTRIES: ${criteria.industries.blacklist.join(', ')}
+PREFERRED INDUSTRIES (Higher fit scores): ${criteria.industries.whitelist.join(', ')}
+BLACKLISTED INDUSTRIES (Very low fit scores): ${criteria.industries.blacklist.join(', ')}
+
+CRITICAL SCORING RULES:
+- Industries in PREFERRED list: Good fit (60-90 score range)
+- Industries NOT in preferred list: Moderate fit (reduce score by 20-30 points)
+- Industries in BLACKLISTED: Poor fit (maximum score 25)
+- Pure SaaS, software companies, and IT companies are NOT suitable for field service management
+
 PLATFORM STRENGTHS: ${criteria.requirements.strengths.join(', ')}
 PLATFORM LIMITATIONS: ${criteria.requirements.weaknesses.join(', ')}
 UNSUPPORTED FEATURES: ${criteria.requirements.unsupported.join(', ')}
+
+Zuper is designed for companies with significant FIELD operations (technicians, installers, maintenance crews).
+NOT suitable for: office-only operations, pure software development, complex project management, full ERP needs.
 `;
 }
 
 /**
- * CRITICAL FIX: Ensure complete analysis structure
+ * Process OpenAI response - NO FALLBACK
  */
-function ensureCompleteAnalysis(result) {
-  // Fix 1: Ensure summary is properly structured
-  if (!result.summary || typeof result.summary === 'string') {
-    result.summary = {};
-  }
-  
-  // Always populate summary fields
-  result.summary.overview = result.summary.overview || 
-    `${result.customerName} is a ${result.industry} company with ${result.userCount?.total || 0} total users (${result.userCount?.backOffice || 0} back office, ${result.userCount?.field || 0} field). They are evaluating Zuper for ${
-      result.services?.types?.[0] || 'field service management'
-    } needs.`;
-  
-  result.summary.keyRequirements = result.summary.keyRequirements?.length > 0 
-    ? result.summary.keyRequirements 
-    : (result.requirements?.keyFeatures || [
-        'Field service management capabilities',
-        'Mobile app for field workers',
-        'Integration with existing systems',
-        'Real-time tracking and reporting',
-        'Customer communication tools'
-      ]);
-  
-  result.summary.mainPainPoints = result.summary.mainPainPoints?.length > 0
-    ? result.summary.mainPainPoints
-    : [
-        'Manual processes for field operations',
-        'Lack of real-time visibility',
-        'Disconnected systems',
-        'Poor customer communication'
-      ];
-
-  // Fix 2: Ensure currentState is properly structured
-  if (!result.currentState || !result.currentState.currentSystems) {
-    result.currentState = {
-      currentSystems: [{
-        name: result.currentState?.currentSystems || 'Manual processes / Spreadsheets',
-        type: 'Manual',
-        usage: 'Basic tracking and management',
-        replacementReasons: ['Looking for automated solution', 'Need better visibility'],
-        painPoints: result.summary.mainPainPoints || ['Manual tracking', 'No real-time data']
-      }],
-      currentProcesses: 'Manual or basic digital processes',
-      manualProcesses: ['Scheduling', 'Dispatching', 'Tracking', 'Reporting']
-    };
-  }
-
-  // Fix 3: Ensure services is properly structured
-  if (!result.services || !result.services.types) {
-    result.services = {
-      types: result.services || ['General field services'],
-      details: {},
-      specializations: [],
-      serviceArea: 'Not specified'
-    };
-  }
-
-  // Fix 4: Ensure requirements structure
-  if (!result.requirements) {
-    result.requirements = {};
-  }
-  
-  // Always have keyFeatures array
-  result.requirements.keyFeatures = result.requirements.keyFeatures || result.summary.keyRequirements || [];
-  
-  // Always have integrations array (even if empty)
-  result.requirements.integrations = result.requirements.integrations || [];
-  
-  // Ensure communications structure
-  if (!result.requirements.communications) {
-    result.requirements.communications = {
-      customerNotifications: {
-        required: true,
-        types: ['Service updates', 'Appointment reminders'],
-        methods: ['Email', 'SMS'],
-        triggers: ['Appointment scheduled', 'Technician en route', 'Job completed']
-      }
-    };
-  }
-  
-  // Ensure features structure
-  if (!result.requirements.features) {
-    result.requirements.features = {
-      scheduling: { needed: true, requirements: ['Basic scheduling'] },
-      mobileApp: { needed: true, features: ['Field data collection'] },
-      reporting: { needed: true, types: ['Basic reports'] }
-    };
-  }
-  
-  // Fix 5: Ensure timeline exists
-  if (!result.timeline) {
-    result.timeline = {
-      desiredGoLive: 'ASAP',
-      urgency: 'High',
-      constraints: []
-    };
-  }
-
-  // Fix 6: Ensure all arrays exist
-  result.strengths = result.strengths || [];
-  result.challenges = result.challenges || [];
-  result.recommendations = result.recommendations || {};
-  
-  // Fix 7: Add strengths if missing
-  if (result.strengths.length === 0) {
-    if (result.fitScore >= 60) {
-      result.strengths = [
-        {
-          title: 'Industry Alignment',
-          description: 'Your industry aligns well with our typical customer base',
-          impact: 'Faster implementation with proven practices',
-          relatedFeatures: ['Industry-specific workflows']
-        },
-        {
-          title: 'Clear Requirements',
-          description: 'Well-defined needs that match our platform capabilities',
-          impact: 'Straightforward implementation path',
-          relatedFeatures: ['Core platform features']
-        },
-        {
-          title: 'Appropriate Scale',
-          description: 'Company size fits well with our solution',
-          impact: 'Optimal resource utilization',
-          relatedFeatures: ['Scalable architecture']
-        }
-      ];
-    } else {
-      result.strengths = [
-        {
-          title: 'Clear Requirements',
-          description: 'Well-defined needs help in solution design',
-          impact: 'Focused implementation approach',
-          relatedFeatures: ['Core platform features']
-        }
-      ];
+function processOpenAIResponse(response) {
+  try {
+    const content = response.choices[0].message.content;
+    console.log('Raw OpenAI response length:', content.length);
+    
+    // Try to extract JSON from the response
+    let jsonContent = content;
+    
+    // Remove any markdown code blocks if present
+    const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (codeBlockMatch) {
+      jsonContent = codeBlockMatch[1];
     }
-  }
-
-  // Fix 8: Add challenges if missing
-  if (result.challenges.length === 0) {
-    if (result.fitScore < 40) {
-      result.challenges = [
-        {
-          title: 'Industry Mismatch',
-          description: 'Your industry may not be ideal for field service management',
-          severity: 'Critical',
-          mitigation: 'Careful evaluation of use case needed'
-        },
-        {
-          title: 'Limited Field Operations',
-          description: 'Low percentage of field workers reduces platform value',
-          severity: 'Major',
-          mitigation: 'Consider if FSM is the right solution'
-        }
-      ];
-    } else {
-      result.challenges = [
-        {
-          title: 'Standard Implementation',
-          description: 'Typical challenges during implementation',
-          severity: 'Minor',
-          mitigation: 'Follow best practices'
-        }
-      ];
+    
+    // Try to find JSON object in the response
+    const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[0];
     }
-  }
-
-  // Fix 9: Ensure recommendations structure
-  if (!result.recommendations.implementationApproach) {
-    result.recommendations.implementationApproach = {
-      strategy: result.fitScore < 40 
-        ? 'Careful evaluation recommended due to low fit score. Consider alternative solutions that better match your primarily office-based operations.'
-        : 'Standard implementation approach recommended with focus on your specific requirements.',
-      phases: [
-        {
-          phase: 1,
-          name: 'Discovery & Planning',
-          duration: '1-2 weeks',
-          activities: ['Requirements gathering', 'System design', 'Integration planning']
-        },
-        {
-          phase: 2,
-          name: 'Configuration & Setup',
-          duration: '2-3 weeks',
-          activities: ['System configuration', 'Data migration', 'Integration setup']
-        },
-        {
-          phase: 3,
-          name: 'Training & Deployment',
-          duration: '1-2 weeks',
-          activities: ['User training', 'Pilot testing', 'Full deployment']
-        }
-      ]
+    
+    // Parse the JSON
+    const analysisResults = JSON.parse(jsonContent);
+    
+    // Return EXACTLY what OpenAI gave us, just ensure basic structure
+    return {
+      ...analysisResults,
+      date: new Date().toISOString()
     };
+    
+  } catch (e) {
+    console.error('Error parsing OpenAI response:', e);
+    console.error('Response content:', response.choices[0].message.content);
+    
+    // Don't return fallback - throw error instead
+    throw new Error('Failed to parse OpenAI response. The AI analysis could not be completed.');
   }
+}
 
-  if (!result.recommendations.integrationStrategy) {
-    result.recommendations.integrationStrategy = {
-      approach: 'Phased integration approach',
-      details: []
-    };
-  }
-
-  if (!result.recommendations.trainingRecommendations) {
-    result.recommendations.trainingRecommendations = [
-      {
-        audience: 'Field Workers',
-        topics: ['Mobile app usage', 'Data collection'],
-        duration: '2 hours',
-        method: 'Virtual training'
-      },
-      {
-        audience: 'Office Staff',
-        topics: ['System navigation', 'Scheduling', 'Reporting'],
-        duration: '4 hours',
-        method: 'Virtual training'
-      }
-    ];
-  }
+/**
+ * Minimal structure validation - don't overwrite data
+ */
+function validateMinimalStructure(result) {
+  // Only ensure required fields exist, don't overwrite with defaults
+  if (!result.customerName) result.customerName = 'Unknown Customer';
+  if (!result.industry) result.industry = 'Not specified';
+  if (!result.userCount) result.userCount = { total: 0, backOffice: 0, field: 0 };
+  if (!result.fitScore && result.fitScore !== 0) result.fitScore = 50;
+  
+  // Ensure arrays exist but don't add default content
+  if (!Array.isArray(result.strengths)) result.strengths = [];
+  if (!Array.isArray(result.challenges)) result.challenges = [];
+  if (!Array.isArray(result.similarCustomers)) result.similarCustomers = [];
+  
+  // Ensure objects exist but don't add default content
+  if (!result.summary) result.summary = {};
+  if (!result.requirements) result.requirements = {};
+  if (!result.recommendations) result.recommendations = {};
+  if (!result.currentState) result.currentState = {};
+  if (!result.services) result.services = {};
+  if (!result.timeline) result.timeline = {};
+  if (!result.budget) result.budget = {};
   
   return result;
 }
 
 /**
- * Fix similar customers to ensure proper industry matching
+ * Apply comprehensive criteria adjustments - ONLY adjust fit score
+ */
+function applyComprehensiveCriteriaAdjustments(result, criteria) {
+  // Don't modify the result data, only adjust the fit score
+  let adjustedScore = result.fitScore || 50;
+  
+  const scoreBreakdown = {
+    baseScore: adjustedScore,
+    industryAdjustment: 0,
+    fieldWorkerPenalty: 0,
+    complexityPenalty: 0,
+    finalScore: 0
+  };
+  
+  // Industry scoring
+  const industryLower = result.industry?.toLowerCase() || '';
+  const isPreferred = criteria.industries.whitelist.some(
+    preferred => industryLower.includes(preferred.toLowerCase())
+  );
+  const isBlacklisted = criteria.industries.blacklist.some(
+    blacklisted => industryLower.includes(blacklisted.toLowerCase())
+  );
+  
+  if (isBlacklisted || industryLower.includes('saas') || industryLower.includes('software')) {
+    // Major penalty for blacklisted industries
+    adjustedScore = Math.min(adjustedScore, 25);
+    scoreBreakdown.industryAdjustment = -50;
+  } else if (isPreferred) {
+    // Bonus for preferred industries
+    adjustedScore += 15;
+    scoreBreakdown.industryAdjustment = 15;
+  } else {
+    // PENALTY for non-preferred industries (not in whitelist)
+    adjustedScore -= 20;
+    scoreBreakdown.industryAdjustment = -20;
+  }
+  
+  // Field worker ratio penalty
+  const fieldRatio = (result.userCount?.field || 0) / (result.userCount?.total || 1);
+  if (fieldRatio < 0.2) { // Less than 20% field workers
+    adjustedScore = Math.min(adjustedScore, 30);
+    scoreBreakdown.fieldWorkerPenalty = -40;
+  }
+  
+  // Complexity penalty
+  const integrationCount = result.requirements?.integrations?.length || 0;
+  if (integrationCount > 3) {
+    adjustedScore -= 15;
+    scoreBreakdown.complexityPenalty = -15;
+  }
+  
+  // Calculate final score
+  scoreBreakdown.finalScore = Math.max(0, Math.min(100, adjustedScore));
+  result.fitScore = scoreBreakdown.finalScore;
+  result.scoreBreakdown = scoreBreakdown;
+  
+  return result;
+}
+
+/**
+ * Find REAL similar customers - don't create fake ones
  */
 function enrichWithSimilarCustomers(result, historicalData) {
   const customerIndustry = (result.industry || '').toLowerCase();
-  const isTechCompany = customerIndustry.includes('software') || 
-                       customerIndustry.includes('saas') || 
-                       customerIndustry.includes('tech') ||
-                       customerIndustry.includes('it');
   
-  // Filter historical data appropriately
-  let relevantCustomers = [];
-  
-  if (isTechCompany) {
-    // For tech companies, only show other tech companies
-    relevantCustomers = historicalData.filter(h => {
-      const hIndustry = (h.industry || '').toLowerCase();
-      return hIndustry.includes('software') || 
-             hIndustry.includes('tech') || 
-             hIndustry.includes('it') ||
-             hIndustry.includes('consulting');
-    });
-  } else {
-    // For non-tech, show similar industries
-    relevantCustomers = historicalData.filter(h => {
-      const hIndustry = (h.industry || '').toLowerCase();
-      // Try to match on key industry words
-      const industryWords = customerIndustry.split(/[\s,\/]+/);
-      return industryWords.some(word => 
-        word.length > 3 && hIndustry.includes(word)
-      );
-    });
-  }
-
-  // If no relevant customers found, create appropriate examples
-  if (relevantCustomers.length === 0) {
-    if (isTechCompany) {
-      result.similarCustomers = [
-        {
-          name: 'Tech Solutions Inc',
-          industry: 'Software/IT Services',
-          matchPercentage: 75,
-          matchReasons: ['Technology sector', 'Limited field workforce', 'Integration focus'],
-          implementation: {
-            duration: '90 days',
-            health: 'Average',
-            arr: '$45,000'
-          },
-          keyLearnings: ['Not ideal fit for FSM', 'Limited adoption', 'Consider alternatives']
-        }
-      ];
-    } else {
-      result.similarCustomers = [
-        {
-          name: 'Similar Industry Corp',
-          industry: result.industry,
-          matchPercentage: 70,
-          matchReasons: ['Same industry', 'Similar size'],
-          implementation: {
-            duration: '60 days',
-            health: 'Good',
-            arr: '$35,000'
-          },
-          keyLearnings: ['Standard implementation', 'Good adoption']
-        }
-      ];
-    }
-  } else {
-    // Map the relevant customers
-    result.similarCustomers = relevantCustomers.slice(0, 5).map(h => ({
-      name: h.customerName || 'Similar Customer',
-      industry: h.industry || 'Not specified',
-      matchPercentage: calculateMatchScore(result, h),
-      matchReasons: generateMatchReasons(result, h),
+  // Find truly similar customers
+  const similarCustomers = historicalData
+    .map(h => ({
+      historical: h,
+      score: calculateMatchScore(result, h)
+    }))
+    .filter(item => item.score > 50) // Only include if reasonably similar
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+    .map(item => ({
+      name: item.historical.customerName || 'Historical Customer',
+      industry: item.historical.industry || 'Not specified',
+      matchPercentage: item.score,
+      matchReasons: generateMatchReasons(result, item.historical),
       implementation: {
-        duration: h.businessMetrics?.daysToOnboard ? `${h.businessMetrics.daysToOnboard} days` : '60-90 days',
-        health: h.businessMetrics?.health || 'Good',
-        arr: h.businessMetrics?.arr ? `$${h.businessMetrics.arr.toLocaleString()}` : '$30,000+'
+        duration: item.historical.businessMetrics?.daysToOnboard 
+          ? `${item.historical.businessMetrics.daysToOnboard} days` 
+          : 'Not available',
+        health: item.historical.businessMetrics?.health || 'Not available',
+        arr: item.historical.businessMetrics?.arr 
+          ? `$${item.historical.businessMetrics.arr.toLocaleString()}` 
+          : 'Not available'
       },
-      keyLearnings: generateKeyLearnings(h)
+      keyLearnings: generateKeyLearnings(item.historical)
     }));
-  }
-
-  // Sort by match percentage
-  result.similarCustomers.sort((a, b) => b.matchPercentage - a.matchPercentage);
-
+  
+  // Don't create fake customers - just use what we found
+  result.similarCustomers = similarCustomers;
+  
   return result;
 }
 
@@ -593,28 +453,47 @@ function enrichWithSimilarCustomers(result, historicalData) {
  * Calculate match score between customer and historical data
  */
 function calculateMatchScore(customer, historical) {
-  let score = 50; // Base score
+  let score = 0;
   
-  // Industry match
+  // Industry match (40 points)
   const custInd = (customer.industry || '').toLowerCase();
   const histInd = (historical.industry || '').toLowerCase();
   
-  if (custInd === histInd) {
-    score += 30;
-  } else if (custInd.includes(histInd.split(' ')[0]) || histInd.includes(custInd.split(' ')[0])) {
-    score += 20;
+  if (custInd && histInd) {
+    if (custInd === histInd) {
+      score += 40;
+    } else {
+      // Check for partial matches
+      const custWords = custInd.split(/[\s,\/]+/);
+      const histWords = histInd.split(/[\s,\/]+/);
+      const matches = custWords.filter(w => histWords.some(h => h.includes(w) || w.includes(h)));
+      if (matches.length > 0) {
+        score += 20;
+      }
+    }
   }
   
-  // Size match
+  // Size match (30 points)
   const sizeDiff = Math.abs((customer.userCount?.total || 0) - (historical.userCount?.total || 0));
-  if (sizeDiff < 20) score += 15;
-  else if (sizeDiff < 50) score += 10;
-  else if (sizeDiff < 100) score += 5;
+  if (sizeDiff < 20) score += 30;
+  else if (sizeDiff < 50) score += 20;
+  else if (sizeDiff < 100) score += 10;
   
-  // Service match
+  // Field ratio match (20 points)
+  const custFieldRatio = (customer.userCount?.field || 0) / (customer.userCount?.total || 1);
+  const histFieldRatio = (historical.userCount?.field || 0) / (historical.userCount?.total || 1);
+  const ratioDiff = Math.abs(custFieldRatio - histFieldRatio);
+  
+  if (ratioDiff < 0.1) score += 20;
+  else if (ratioDiff < 0.2) score += 10;
+  
+  // Service match (10 points)
   if (customer.services?.types && historical.services?.length > 0) {
     const matches = customer.services.types.filter(s => 
-      historical.services.some(hs => hs.toLowerCase().includes(s.toLowerCase()))
+      historical.services.some(hs => 
+        hs.toLowerCase().includes(s.toLowerCase()) || 
+        s.toLowerCase().includes(hs.toLowerCase())
+      )
     );
     if (matches.length > 0) score += 10;
   }
@@ -632,32 +511,42 @@ function generateMatchReasons(customer, historical) {
   const custInd = (customer.industry || '').toLowerCase();
   const histInd = (historical.industry || '').toLowerCase();
   
-  if (custInd.includes('tech') || custInd.includes('software')) {
-    reasons.push('Technology sector');
-  } else if (customer.industry && historical.industry) {
-    reasons.push(`${historical.industry} industry`);
+  if (custInd && histInd) {
+    if (custInd === histInd) {
+      reasons.push(`Same industry: ${historical.industry}`);
+    } else if (custInd.includes(histInd.split(' ')[0]) || histInd.includes(custInd.split(' ')[0])) {
+      reasons.push(`Similar industry: ${historical.industry}`);
+    }
   }
   
   // Size
   const sizeDiff = Math.abs((customer.userCount?.total || 0) - (historical.userCount?.total || 0));
   if (sizeDiff < 50) {
-    reasons.push(`Similar size (${historical.userCount?.total || 0} users)`);
+    reasons.push(`Similar size: ${historical.userCount?.total || 0} users`);
   }
   
   // Field ratio
   const custFieldRatio = (customer.userCount?.field || 0) / (customer.userCount?.total || 1);
   const histFieldRatio = (historical.userCount?.field || 0) / (historical.userCount?.total || 1);
   
-  if (Math.abs(custFieldRatio - histFieldRatio) < 0.1) {
-    reasons.push('Similar field/office ratio');
+  if (Math.abs(custFieldRatio - histFieldRatio) < 0.2) {
+    reasons.push(`Similar field/office ratio: ${Math.round(histFieldRatio * 100)}% field`);
   }
   
-  // Integrations
-  if (customer.requirements?.integrations?.length > 2 && historical.requirements?.integrations?.length > 2) {
-    reasons.push('Complex integration requirements');
+  // Services
+  if (customer.services?.types && historical.services?.length > 0) {
+    const matches = customer.services.types.filter(s => 
+      historical.services.some(hs => 
+        hs.toLowerCase().includes(s.toLowerCase()) || 
+        s.toLowerCase().includes(hs.toLowerCase())
+      )
+    );
+    if (matches.length > 0) {
+      reasons.push(`Similar services offered`);
+    }
   }
   
-  return reasons.length > 0 ? reasons : ['General similarity'];
+  return reasons.length > 0 ? reasons : ['General business similarity'];
 }
 
 /**
@@ -668,153 +557,39 @@ function generateKeyLearnings(historical) {
   
   // Health-based learnings
   if (historical.businessMetrics?.health === 'Excellent') {
+    learnings.push('Achieved excellent outcomes');
+  } else if (historical.businessMetrics?.health === 'Good') {
     learnings.push('Successful implementation');
   } else if (historical.businessMetrics?.health === 'Poor') {
-    learnings.push('Implementation challenges');
+    learnings.push('Faced implementation challenges');
   }
   
   // Timeline-based learnings
-  if (historical.businessMetrics?.daysToOnboard && historical.businessMetrics.daysToOnboard < 60) {
-    learnings.push('Quick deployment achieved');
-  } else if (historical.businessMetrics?.daysToOnboard > 120) {
-    learnings.push('Extended implementation timeline');
+  if (historical.businessMetrics?.daysToOnboard) {
+    if (historical.businessMetrics.daysToOnboard < 60) {
+      learnings.push(`Quick deployment: ${historical.businessMetrics.daysToOnboard} days`);
+    } else if (historical.businessMetrics.daysToOnboard > 120) {
+      learnings.push(`Extended timeline: ${historical.businessMetrics.daysToOnboard} days`);
+    }
   }
   
-  // Feature-based learnings
-  if (historical.requirements?.integrations?.length > 2) {
-    learnings.push('Complex integrations managed');
-  }
-  
+  // Feature adoption
   if (historical.requirements?.checklists?.needed) {
-    learnings.push('Checklist customization important');
+    learnings.push('Heavy checklist usage');
+  }
+  if (historical.requirements?.integrations?.length > 2) {
+    learnings.push('Multiple integrations required');
   }
   
-  // Industry-specific learnings
+  // Industry-specific
   const industry = (historical.industry || '').toLowerCase();
-  if (industry.includes('tech') || industry.includes('software')) {
-    learnings.push('Limited field service use case');
+  if (industry.includes('construction') || industry.includes('hvac') || industry.includes('plumbing')) {
+    learnings.push('Traditional field service industry');
+  } else if (industry.includes('tech') || industry.includes('software')) {
+    learnings.push('Non-traditional FSM use case');
   }
   
-  return learnings.length > 0 ? learnings : ['Standard implementation'];
-}
-
-/**
- * Fix the data structure to match ComprehensiveAnalysisDisplay expectations
- */
-function fixDataStructureForUI(result) {
-  // Validate and fix summary
-  if (!result.summary || !result.summary.overview || result.summary.overview === 'No overview available.') {
-    result.summary = ensureCompleteAnalysis(result).summary;
-  }
-  
-  // Validate and fix strengths
-  if (!result.strengths || result.strengths.length === 0) {
-    result.strengths = ensureCompleteAnalysis(result).strengths;
-  }
-  
-  // Validate and fix challenges
-  if (!result.challenges || result.challenges.length === 0) {
-    result.challenges = ensureCompleteAnalysis(result).challenges;
-  }
-  
-  // Validate and fix recommendations
-  if (!result.recommendations || !result.recommendations.implementationApproach || !result.recommendations.implementationApproach.strategy) {
-    result.recommendations = ensureCompleteAnalysis(result).recommendations;
-  }
-  
-  // Ensure all arrays exist
-  result.similarCustomers = result.similarCustomers || [];
-  result.requirements = result.requirements || {};
-  result.requirements.keyFeatures = result.requirements.keyFeatures || [];
-  result.requirements.integrations = result.requirements.integrations || [];
-  result.requirements.checklists = result.requirements.checklists || [];
-  
-  return result;
-}
-
-/**
- * Apply comprehensive criteria adjustments
- */
-function applyComprehensiveCriteriaAdjustments(result, criteria) {
-  // Initialize scoring
-  const scoreBreakdown = {
-    baseScore: 50,
-    industryAdjustment: 0,
-    strengthsBonus: 0,
-    limitationsPenalty: 0,
-    unsupportedPenalty: 0,
-    complexityAdjustment: 0,
-    finalScore: 0
-  };
-  
-  let adjustedScore = scoreBreakdown.baseScore;
-  
-  // Industry scoring
-  const industryLower = result.industry?.toLowerCase() || '';
-  const isPreferred = criteria.industries.whitelist.some(
-    preferred => industryLower.includes(preferred.toLowerCase())
-  );
-  const isBlacklisted = criteria.industries.blacklist.some(
-    blacklisted => industryLower.includes(blacklisted.toLowerCase())
-  );
-  
-  if (isBlacklisted) {
-    // Blacklisted industry - major penalty
-    adjustedScore = 20; // Cap at 20% for blacklisted industries
-    scoreBreakdown.industryAdjustment = -50;
-  } else if (isPreferred) {
-    adjustedScore += 15;
-    scoreBreakdown.industryAdjustment = 15;
-  }
-  
-  // Field worker ratio penalty
-  const fieldRatio = (result.userCount?.field || 0) / (result.userCount?.total || 1);
-  if (fieldRatio < 0.1) { // Less than 10% field workers
-    adjustedScore -= 15;
-    scoreBreakdown.limitationsPenalty -= 15;
-  }
-  
-  // Unsupported features penalty
-  const transcriptLower = JSON.stringify(result).toLowerCase();
-  let unsupportedCount = 0;
-  
-  criteria.requirements.unsupported.forEach(feature => {
-    if (transcriptLower.includes(feature.toLowerCase())) {
-      unsupportedCount++;
-    }
-  });
-  
-  if (unsupportedCount > 0) {
-    adjustedScore -= (unsupportedCount * 5);
-    scoreBreakdown.unsupportedPenalty -= (unsupportedCount * 5);
-  }
-  
-  // Complexity adjustment
-  const integrationCount = result.requirements?.integrations?.length || 0;
-  if (integrationCount > 3) {
-    adjustedScore -= 10;
-    scoreBreakdown.complexityAdjustment -= 10;
-  }
-  
-  // Strengths matching
-  let strengthMatches = 0;
-  criteria.requirements.strengths.forEach(strength => {
-    if (transcriptLower.includes(strength.toLowerCase())) {
-      strengthMatches++;
-    }
-  });
-  
-  if (strengthMatches > 0) {
-    adjustedScore += (strengthMatches * 3);
-    scoreBreakdown.strengthsBonus = strengthMatches * 3;
-  }
-  
-  // Calculate final score
-  scoreBreakdown.finalScore = Math.max(0, Math.min(100, adjustedScore));
-  result.fitScore = scoreBreakdown.finalScore;
-  result.scoreBreakdown = scoreBreakdown;
-  
-  return result;
+  return learnings.length > 0 ? learnings : ['Standard customer profile'];
 }
 
 // Helper functions
@@ -836,7 +611,7 @@ async function callOpenAI(prompt) {
         messages: [
           {
             role: 'system',
-            content: 'You are a helpful assistant that analyzes meeting transcripts and extracts customer information. Always respond with valid JSON only, no other text.'
+            content: 'You are an expert at analyzing business requirements for field service management software. Be accurate and honest in your assessments. Always respond with valid JSON only.'
           },
           {
             role: 'user',
@@ -850,7 +625,8 @@ async function callOpenAI(prompt) {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 30000 // 30 second timeout
       }
     );
     
@@ -866,165 +642,6 @@ async function callOpenAI(prompt) {
     }
     throw new Error(`OpenAI API error: ${error.message}`);
   }
-}
-
-function processOpenAIResponse(response, originalTranscript) {
-  try {
-    const content = response.choices[0].message.content;
-    
-    // Log the raw response for debugging
-    console.log('Raw OpenAI response length:', content.length);
-    
-    // Try to extract JSON from the response
-    let jsonContent = content;
-    
-    // Remove any markdown code blocks if present
-    const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-    if (codeBlockMatch) {
-      jsonContent = codeBlockMatch[1];
-    }
-    
-    // Try to find JSON object in the response
-    const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      jsonContent = jsonMatch[0];
-    }
-    
-    // Parse the JSON
-    const analysisResults = JSON.parse(jsonContent);
-    
-    // Build properly structured result
-    const result = {
-      customerName: analysisResults.customerName || extractCustomerName(originalTranscript),
-      industry: analysisResults.industry || 'Not specified',
-      userCount: {
-        total: parseInt(analysisResults.userCount?.total) || 0,
-        backOffice: parseInt(analysisResults.userCount?.backOffice) || 0,
-        field: parseInt(analysisResults.userCount?.field) || 0
-      },
-      currentState: analysisResults.currentState || {},
-      services: analysisResults.services || {},
-      requirements: analysisResults.requirements || {},
-      timeline: analysisResults.timeline || {},
-      budget: analysisResults.budget || {},
-      summary: analysisResults.summary || {},
-      strengths: analysisResults.strengths || [],
-      challenges: analysisResults.challenges || [],
-      similarCustomers: [], // Will be populated by enrichWithSimilarCustomers
-      recommendations: analysisResults.recommendations || {},
-      fitScore: analysisResults.fitScore || 50,
-      scoreBreakdown: analysisResults.scoreBreakdown || {},
-      date: new Date().toISOString()
-    };
-    
-    return result;
-  } catch (e) {
-    console.error('Error parsing OpenAI response as JSON:', e);
-    console.error('Response content preview:', response.choices[0].message.content.substring(0, 500) + '...');
-    
-    // Return a basic structure with extracted info
-    return createFallbackResult(originalTranscript);
-  }
-}
-
-/**
- * Extract customer name from transcript
- */
-function extractCustomerName(transcript) {
-  // Try various patterns to extract company name
-  const patterns = [
-    /(?:We're|We are)\s+([A-Z][A-Za-z\s&]+?)(?:,|\.|and|looking)/i,
-    /(?:company|organization|business)(?:\s+(?:is|called|named))?\s+([A-Z][A-Za-z\s&]+)/i,
-    /(?:I'm|I am|We're|We are)\s+(?:from|with|at)\s+([A-Z][A-Za-z\s&]+)/i,
-    /([A-Z][A-Za-z\s&]+)\s+(?:is|are)\s+(?:looking|interested|considering)/i
-  ];
-  
-  for (const pattern of patterns) {
-    const match = transcript.match(pattern);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-  }
-  
-  return 'Prospective Customer';
-}
-
-/**
- * Create a fallback result when parsing fails
- */
-function createFallbackResult(transcript) {
-  const customerName = extractCustomerName(transcript);
-  
-  return {
-    customerName: customerName,
-    industry: 'Not specified',
-    userCount: { total: 0, backOffice: 0, field: 0 },
-    currentState: {
-      currentSystems: [{
-        name: 'Current system not specified',
-        usage: 'General business operations',
-        replacementReasons: ['Looking for better solution'],
-        painPoints: ['Current limitations']
-      }],
-      currentProcesses: 'Not specified',
-      manualProcesses: []
-    },
-    services: {
-      types: ['Not specified'],
-      details: {},
-      specializations: [],
-      serviceArea: 'Not specified'
-    },
-    requirements: {
-      keyFeatures: ['Field service management capabilities'],
-      integrations: [],
-      checklists: [],
-      communications: {
-        customerNotifications: {
-          required: true,
-          types: ['Service updates'],
-          methods: ['Email'],
-          triggers: ['Status changes']
-        }
-      },
-      features: {
-        mobileApp: { needed: true },
-        reporting: { needed: true, types: ['Basic reports'] }
-      }
-    },
-    timeline: { desiredGoLive: 'Not specified', urgency: 'Medium' },
-    budget: { mentioned: false },
-    summary: {
-      overview: `${customerName} is evaluating field service management solutions.`,
-      keyRequirements: ['Field service capabilities'],
-      mainPainPoints: ['Current system limitations']
-    },
-    strengths: [{
-      title: 'Interest in Solution',
-      description: 'Actively evaluating FSM solutions',
-      impact: 'Motivated to implement',
-      relatedFeatures: ['Platform capabilities']
-    }],
-    challenges: [{
-      title: 'Limited Information',
-      description: 'Need more details for accurate assessment',
-      severity: 'Major',
-      mitigation: 'Detailed discovery session required'
-    }],
-    recommendations: {
-      implementationApproach: {
-        strategy: 'Conduct detailed discovery to understand requirements',
-        phases: [{
-          phase: 1,
-          name: 'Discovery',
-          duration: '1 week',
-          activities: ['Requirements gathering']
-        }]
-      }
-    },
-    fitScore: 50,
-    date: new Date().toISOString()
-  };
 }
 
 module.exports = openaiService;
