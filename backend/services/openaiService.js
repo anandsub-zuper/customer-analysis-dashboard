@@ -250,6 +250,55 @@ Return a JSON object with this EXACT structure:
         }
       ]
     },
+    "implementationApproach": {
+      "strategy": "If fit score <40, provide STRATEGIC GUIDANCE for the sales team:
+        - Should they pursue this prospect? (Yes/No/Conditional)
+        - If No: Suggest polite ways to decline or redirect
+        - If Conditional: What would need to change to make them viable?
+        - If Yes despite low score: Special approach needed
+        
+        Example for poor fit:
+        'This prospect is not recommended for standard implementation. Key issues: [specific problems]. 
+         Recommendation: Position as future opportunity when they have more field operations. 
+         Suggest alternative solutions that better match their needs.'",
+      "phases": [
+        // For poor fits, phases might be:
+        {
+          "phase": 1,
+          "name": "Qualification Review",
+          "duration": "1 week",
+          "activities": ["Validate if field service is truly needed", "Explore alternative solutions", "Document specific gaps"]
+        }
+      ]
+    },
+        "salesStrategy": {
+      "recommendation": "PURSUE/CONDITIONAL/DECLINE",
+      "reasoning": "Specific reasons based on analysis",
+      "talkingPoints": [
+        "How to position if declining",
+        "Alternative solutions to suggest",
+        "Future conditions that would improve fit"
+      ],
+      "risks": [
+        "Implementation risks if pursued",
+        "Customer satisfaction risks",
+        "Resource allocation concerns"
+      ]
+    },
+    "alternativeApproaches": {
+      "options": [
+        {
+          "approach": "Partnership/Referral",
+          "description": "Refer to partner better suited for their needs",
+          "rationale": "Maintains relationship while avoiding poor fit"
+        },
+        {
+          "approach": "Limited Pilot",
+          "description": "Small-scale trial to validate fit",
+          "rationale": "Low-risk way to test if concerns are valid"
+        }
+      ]
+    },
     "integrationStrategy": {
       "approach": "Based on their actual integration needs",
       "details": [
