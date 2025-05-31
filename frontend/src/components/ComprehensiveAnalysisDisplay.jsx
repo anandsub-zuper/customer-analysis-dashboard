@@ -657,9 +657,10 @@ const RequirementsTab = ({ data }) => {
 // Recommendations Tab
 const RecommendationsTab = ({ data }) => {
   const hasRecommendations = data.recommendations && (
+    data.recommendations.fitScoreRationale ||
+    data.recommendations.salesStrategy ||
     data.recommendations.implementationApproach?.strategy ||
-    data.recommendations.integrationStrategy?.approach ||
-    data.recommendations.trainingRecommendations?.length > 0
+    data.recommendations.pricingGuidance
   );
     
   if (!hasRecommendations) {
@@ -670,79 +671,214 @@ const RecommendationsTab = ({ data }) => {
     );
   }
   
+  const { recommendations } = data;
+  const salesStrategy = recommendations.salesStrategy || {};
+  const fitRationale = recommendations.fitScoreRationale || {};
+  
+  // Determine recommendation color
+  const getRecommendationColor = (recommendation) => {
+    switch (recommendation) {
+      case 'PURSUE': return 'bg-green-100 text-green-800 border-green-300';
+      case 'CONDITIONAL': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      case 'DECLINE': return 'bg-red-100 text-red-800 border-red-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+  
   return (
     <div className="space-y-6">
-      {data.recommendations.implementationApproach?.strategy && (
-        <>
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-blue-800">
-              {data.recommendations.implementationApproach.strategy}
-            </p>
-          </div>
-
-          {data.recommendations.implementationApproach.phases?.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold mb-3">Implementation Phases</h3>
-              <div className="space-y-3">
-                {data.recommendations.implementationApproach.phases.map((phase, idx) => (
-                  <div key={idx} className="border-l-4 border-blue-500 pl-4">
-                    <h4 className="font-medium">Phase {phase.phase}: {phase.name}</h4>
-                    <p className="text-sm text-gray-600">Duration: {phase.duration}</p>
-                    {phase.activities?.length > 0 && (
-                      <ul className="text-sm mt-2 space-y-1">
-                        {phase.activities.map((activity, i) => (
-                          <li key={i}>• {activity}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
+      {/* Fit Score Rationale */}
+      {fitRationale.summary && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold mb-3 flex items-center">
+            <Award className="h-5 w-5 mr-2 text-blue-600" />
+            Fit Score Analysis: {data.fitScore}%
+          </h3>
+          <p className="text-gray-700 mb-4">{fitRationale.summary}</p>
+          
+          <div className="grid md:grid-cols-2 gap-4">
+            {fitRationale.positiveFactors?.length > 0 && (
+              <div>
+                <h4 className="font-medium text-green-700 mb-2">Positive Factors:</h4>
+                <ul className="space-y-1">
+                  {fitRationale.positiveFactors.map((factor, idx) => (
+                    <li key={idx} className="flex items-start">
+                      <Check className="h-4 w-4 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
+                      <span className="text-sm">{factor}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </div>
+            )}
+            
+            {fitRationale.negativeFactors?.length > 0 && (
+              <div>
+                <h4 className="font-medium text-red-700 mb-2">Challenges:</h4>
+                <ul className="space-y-1">
+                  {fitRationale.negativeFactors.map((factor, idx) => (
+                    <li key={idx} className="flex items-start">
+                      <X className="h-4 w-4 text-red-600 mr-2 mt-0.5 flex-shrink-0" />
+                      <span className="text-sm">{factor}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          
+          {fitRationale.overallAssessment && (
+            <p className="mt-4 font-medium text-gray-800">{fitRationale.overallAssessment}</p>
           )}
-        </>
+        </div>
       )}
 
-      {data.recommendations.integrationStrategy && (
-        <div>
-          <h3 className="text-lg font-semibold mb-3">Integration Strategy</h3>
-          <p className="text-gray-700 mb-3">{data.recommendations.integrationStrategy.approach}</p>
-          {data.recommendations.integrationStrategy.details?.length > 0 && (
-            <div className="space-y-2">
-              {data.recommendations.integrationStrategy.details.map((detail, idx) => (
-                <div key={idx} className="bg-gray-50 p-3 rounded">
-                  <p className="font-medium">{detail.integration}</p>
-                  <p className="text-sm text-gray-600">Method: {detail.method}</p>
-                  <p className="text-sm text-gray-600">Timeline: {detail.timeline}</p>
-                </div>
-              ))}
+      {/* Sales Strategy */}
+      {salesStrategy.recommendation && (
+        <div className={`border-2 rounded-lg p-6 ${getRecommendationColor(salesStrategy.recommendation)}`}>
+          <h3 className="text-lg font-semibold mb-3 flex items-center">
+            <Briefcase className="h-5 w-5 mr-2" />
+            Sales Recommendation: {salesStrategy.recommendation}
+          </h3>
+          
+          {salesStrategy.approach && (
+            <div className="mb-4">
+              <h4 className="font-medium mb-2">Recommended Approach:</h4>
+              <p className="text-sm">{salesStrategy.approach}</p>
+            </div>
+          )}
+          
+          {salesStrategy.reasoning && (
+            <div className="mb-4">
+              <h4 className="font-medium mb-2">Reasoning:</h4>
+              <p className="text-sm">{salesStrategy.reasoning}</p>
+            </div>
+          )}
+          
+          <div className="grid md:grid-cols-2 gap-4">
+            {salesStrategy.talkingPoints?.length > 0 && (
+              <div>
+                <h4 className="font-medium mb-2">Key Talking Points:</h4>
+                <ul className="space-y-1">
+                  {salesStrategy.talkingPoints.map((point, idx) => (
+                    <li key={idx} className="text-sm flex items-start">
+                      <span className="mr-2">•</span>
+                      {point}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {salesStrategy.risks?.length > 0 && (
+              <div>
+                <h4 className="font-medium mb-2">Risks to Consider:</h4>
+                <ul className="space-y-1">
+                  {salesStrategy.risks.map((risk, idx) => (
+                    <li key={idx} className="text-sm flex items-start">
+                      <AlertTriangle className="h-3 w-3 mr-2 mt-0.5 flex-shrink-0" />
+                      {risk}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          
+          {salesStrategy.nextSteps?.length > 0 && (
+            <div className="mt-4">
+              <h4 className="font-medium mb-2">Next Steps:</h4>
+              <ol className="space-y-1">
+                {salesStrategy.nextSteps.map((step, idx) => (
+                  <li key={idx} className="text-sm flex items-start">
+                    <span className="font-medium mr-2">{idx + 1}.</span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
             </div>
           )}
         </div>
       )}
 
-      {data.recommendations.trainingRecommendations?.length > 0 && (
-        <div>
-          <h3 className="text-lg font-semibold mb-3">Training Recommendations</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {data.recommendations.trainingRecommendations.map((training, idx) => (
-              <div key={idx} className="border rounded-lg p-4">
-                <h4 className="font-medium mb-2">{training.audience}</h4>
-                <p className="text-sm text-gray-600 mb-2">Duration: {training.duration}</p>
-                <p className="text-sm text-gray-600 mb-2">Method: {training.method}</p>
-                {training.topics?.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium mb-1">Topics:</p>
-                    <ul className="text-sm text-gray-600">
-                      {training.topics.map((topic, i) => (
-                        <li key={i}>• {topic}</li>
+      {/* Alternative Options */}
+      {recommendations.alternativeOptions && (
+        <div className="bg-gray-50 rounded-lg p-4">
+          <h4 className="font-medium mb-3">Alternative Approaches:</h4>
+          {recommendations.alternativeOptions.ifPursuing && (
+            <div className="mb-3">
+              <p className="text-sm font-medium text-gray-700">If Pursuing:</p>
+              <p className="text-sm text-gray-600">{recommendations.alternativeOptions.ifPursuing}</p>
+            </div>
+          )}
+          {recommendations.alternativeOptions.ifDeclining && (
+            <div className="mb-3">
+              <p className="text-sm font-medium text-gray-700">If Declining:</p>
+              <p className="text-sm text-gray-600">{recommendations.alternativeOptions.ifDeclining}</p>
+            </div>
+          )}
+          {recommendations.alternativeOptions.partnerReferral && (
+            <div>
+              <p className="text-sm font-medium text-gray-700">Partner Referral Option:</p>
+              <p className="text-sm text-gray-600">{recommendations.alternativeOptions.partnerReferral}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Pricing Guidance */}
+      {recommendations.pricingGuidance && (
+        <div className="border rounded-lg p-4">
+          <h4 className="font-medium mb-3 flex items-center">
+            <DollarSign className="h-5 w-5 mr-2 text-green-600" />
+            Pricing Recommendation
+          </h4>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm font-medium">Recommended Tier:</p>
+              <p className="text-lg font-semibold text-blue-600">
+                {recommendations.pricingGuidance.recommendedTier}
+              </p>
+            </div>
+            {recommendations.pricingGuidance.specialConsiderations && (
+              <div>
+                <p className="text-sm font-medium">Special Considerations:</p>
+                <p className="text-sm text-gray-600">
+                  {recommendations.pricingGuidance.specialConsiderations}
+                </p>
+              </div>
+            )}
+          </div>
+          {recommendations.pricingGuidance.justification && (
+            <p className="text-sm text-gray-600 mt-2">
+              {recommendations.pricingGuidance.justification}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Implementation Approach (if pursuing) */}
+      {recommendations.implementationApproach?.strategy && (
+        <div className="border-t pt-6">
+          <h3 className="text-lg font-semibold mb-3">Implementation Strategy (If Pursuing)</h3>
+          <p className="text-gray-700 mb-4">{recommendations.implementationApproach.strategy}</p>
+          
+          {recommendations.implementationApproach.phases?.length > 0 && (
+            <div className="space-y-3">
+              {recommendations.implementationApproach.phases.map((phase, idx) => (
+                <div key={idx} className="border-l-4 border-blue-500 pl-4">
+                  <h4 className="font-medium">Phase {phase.phase}: {phase.name}</h4>
+                  <p className="text-sm text-gray-600">Duration: {phase.duration}</p>
+                  {phase.activities?.length > 0 && (
+                    <ul className="text-sm mt-2 space-y-1">
+                      {phase.activities.map((activity, i) => (
+                        <li key={i}>• {activity}</li>
                       ))}
                     </ul>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
