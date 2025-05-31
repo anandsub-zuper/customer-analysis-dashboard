@@ -931,7 +931,7 @@ async function callOpenAI(prompt) {
       throw new Error('OpenAI API key is not configured.');
     }
     
-    const model = process.env.OPENAI_MODEL || 'gpt-4-turbo';
+    const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
     
     console.log('Using OpenAI model:', model);
     
