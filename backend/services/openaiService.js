@@ -117,6 +117,12 @@ EXAMPLE OF GOOD SPECIFIC CONTENT:
 
 ${criteriaData}
 
+SALES STRATEGY GUIDELINES BASED ON FIT SCORE:
+- Score 70-100: Strong fit - Pursue aggressively with standard pricing
+- Score 50-69: Moderate fit - Pursue with customized approach, address gaps
+- Score 30-49: Weak fit - Conditional pursuit, need executive approval
+- Score 0-29: Poor fit - Recommend alternative solutions or decline
+
 IMPORTANT SCORING RULES:
 - Industries in the PREFERRED list: Score 60-85
 - Industries NOT in the preferred list (like cleaning, landscaping, etc.): Score 40-60
@@ -238,7 +244,7 @@ Return a JSON object with this EXACT structure:
       "mitigation": "Honest assessment of how to address"
     }
   ],
-  "recommendations": {
+  "recommendations": {  
     "implementationApproach": {
       "strategy": "If fit score <30, recommend they consider alternatives. Otherwise provide real strategy",
       "phases": [
@@ -299,6 +305,30 @@ Return a JSON object with this EXACT structure:
         }
       ]
     },
+    "fitScoreRationale": {
+    "summary": "Clear explanation of why they received this fit score",
+    "positiveFactors": ["What contributes positively to their score"],
+    "negativeFactors": ["What reduces their score"],
+    "overallAssessment": "1-2 sentences on overall fit"
+  },
+  "salesStrategy": {
+    "recommendation": "PURSUE/CONDITIONAL/DECLINE",
+    "approach": "Detailed guidance on how sales team should proceed",
+    "reasoning": "Why this approach is recommended",
+    "talkingPoints": ["Key points to emphasize"],
+    "risks": ["Implementation risks"],
+    "nextSteps": ["Specific action items"]
+  },
+  "alternativeOptions": {
+    "ifPursuing": "Special considerations if moving forward",
+    "ifDeclining": "How to gracefully decline",
+    "partnerReferral": "Potential partners who might be better suited"
+  },
+  "pricingGuidance": {
+    "recommendedTier": "Starter/Professional/Enterprise",
+    "specialConsiderations": "Any pricing adjustments needed",
+    "justification": "Why this pricing is appropriate"
+  },
     "integrationStrategy": {
       "approach": "Based on their actual integration needs",
       "details": [
@@ -426,61 +456,148 @@ function validateMinimalStructure(result) {
  * Apply comprehensive criteria adjustments - ONLY adjust fit score
  */
 function applyComprehensiveCriteriaAdjustments(result, criteria) {
-  // Don't modify the result data, only adjust the fit score
   let adjustedScore = result.fitScore || 50;
   
   const scoreBreakdown = {
     baseScore: adjustedScore,
     industryAdjustment: 0,
-    fieldWorkerPenalty: 0,
+    fieldWorkerBonus: 0,
     complexityPenalty: 0,
-    finalScore: 0
+    sizeAdjustment: 0,
+    finalScore: 0,
+    category: '',
+    rationale: []
   };
   
-  // Industry scoring
-  const industryLower = result.industry?.toLowerCase() || '';
-  const isPreferred = criteria.industries.whitelist.some(
-    preferred => industryLower.includes(preferred.toLowerCase())
-  );
-  const isBlacklisted = criteria.industries.blacklist.some(
-    blacklisted => industryLower.includes(blacklisted.toLowerCase())
-  );
+  const industryLower = (result.industry || '').toLowerCase().trim();
   
-  if (isBlacklisted || industryLower.includes('saas') || industryLower.includes('software')) {
-    // Major penalty for blacklisted industries
+  // Check if preferred industry
+  const isPreferred = criteria.industries.whitelist.some(preferred => {
+    const prefLower = preferred.toLowerCase().trim();
+    
+    if (industryLower === prefLower) return true;
+    if (industryLower.includes(prefLower)) return true;
+    if (prefLower.includes(industryLower)) return true;
+    
+    // Special handling
+    if (industryLower.includes('cleaning') && prefLower.includes('cleaning')) return true;
+    if (industryLower.includes('hvac') && prefLower.includes('hvac')) return true;
+    if (industryLower.includes('plumbing') && prefLower.includes('plumbing')) return true;
+    if (industryLower.includes('electrical') && prefLower.includes('electrical')) return true;
+    
+    // Word matching
+    const indWords = industryLower.split(/[\s\-,]+/).filter(w => w.length > 2);
+    const prefWords = prefLower.split(/[\s\-,]+/).filter(w => w.length > 2);
+    
+    return indWords.some(iw => prefWords.some(pw => 
+      iw.includes(pw) || pw.includes(iw) ||
+      (iw.length > 3 && pw.length > 3 && iw.substring(0, 3) === pw.substring(0, 3))
+    ));
+  });
+  
+  // Check if blacklisted
+  const isBlacklisted = criteria.industries.blacklist.some(blacklisted => {
+    const blackLower = blacklisted.toLowerCase().trim();
+    return industryLower.includes(blackLower);
+  });
+  
+  // Check if field service
+  const fieldServiceKeywords = ['cleaning', 'hvac', 'plumbing', 'electrical', 'roofing', 
+                                'maintenance', 'repair', 'service', 'installation', 'inspection',
+                                'landscaping', 'pest control', 'janitorial', 'facilities', 'spa', 
+                                'salon', 'wellness', 'therapy'];
+  const isFieldService = fieldServiceKeywords.some(keyword => industryLower.includes(keyword));
+  
+  console.log('Industry analysis:', {
+    industry: result.industry,
+    isPreferred,
+    isBlacklisted,
+    isFieldService
+  });
+  
+  // Industry scoring
+  if (isBlacklisted) {
     adjustedScore = Math.min(adjustedScore, 25);
     scoreBreakdown.industryAdjustment = -50;
+    scoreBreakdown.category = 'blacklisted';
+    scoreBreakdown.rationale.push(`${result.industry} is in our blacklist of incompatible industries`);
   } else if (isPreferred) {
-    // Bonus for preferred industries
     adjustedScore += 15;
     scoreBreakdown.industryAdjustment = 15;
+    scoreBreakdown.category = 'preferred';
+    scoreBreakdown.rationale.push(`${result.industry} is a preferred industry with proven success`);
+  } else if (isFieldService) {
+    // Neutral field service - no adjustment
+    scoreBreakdown.industryAdjustment = 0;
+    scoreBreakdown.category = 'neutral-field-service';
+    scoreBreakdown.rationale.push(`${result.industry} is a field service business but not in our core verticals`);
   } else {
-    // PENALTY for non-preferred industries (not in whitelist)
+    // Not field service - small penalty
+    adjustedScore -= 10;
+    scoreBreakdown.industryAdjustment = -10;
+    scoreBreakdown.category = 'neutral-non-field';
+    scoreBreakdown.rationale.push(`${result.industry} is outside our typical field service focus`);
+  }
+  
+  // Field worker ratio
+  const totalUsers = result.userCount?.total || 0;
+  const fieldUsers = result.userCount?.field || 0;
+  const fieldRatio = totalUsers > 0 ? fieldUsers / totalUsers : 0;
+  
+  if (fieldRatio >= 0.7) {
+    adjustedScore += 10;
+    scoreBreakdown.fieldWorkerBonus = 10;
+    scoreBreakdown.rationale.push(`Excellent field worker ratio (${Math.round(fieldRatio * 100)}%) indicates strong fit`);
+  } else if (fieldRatio >= 0.5) {
+    adjustedScore += 5;
+    scoreBreakdown.fieldWorkerBonus = 5;
+    scoreBreakdown.rationale.push(`Good field worker ratio (${Math.round(fieldRatio * 100)}%)`);
+  } else if (fieldRatio >= 0.3) {
+    scoreBreakdown.fieldWorkerBonus = 0;
+    scoreBreakdown.rationale.push(`Moderate field worker ratio (${Math.round(fieldRatio * 100)}%)`);
+  } else {
     adjustedScore -= 20;
-    scoreBreakdown.industryAdjustment = -20;
+    scoreBreakdown.fieldWorkerBonus = -20;
+    scoreBreakdown.rationale.push(`Low field worker ratio (${Math.round(fieldRatio * 100)}%) indicates poor fit for FSM`);
   }
   
-  // Field worker ratio penalty
-  const fieldRatio = (result.userCount?.field || 0) / (result.userCount?.total || 1);
-  if (fieldRatio < 0.2) { // Less than 20% field workers
-    adjustedScore = Math.min(adjustedScore, 30);
-    scoreBreakdown.fieldWorkerPenalty = -40;
+  // Size adjustment
+  if (totalUsers >= 50 && totalUsers <= 200) {
+    adjustedScore += 5;
+    scoreBreakdown.sizeAdjustment = 5;
+    scoreBreakdown.rationale.push(`Ideal company size (${totalUsers} users)`);
+  } else if (totalUsers > 500) {
+    adjustedScore -= 10;
+    scoreBreakdown.sizeAdjustment = -10;
+    scoreBreakdown.rationale.push(`Very large organization (${totalUsers} users) may require enterprise approach`);
+  } else if (totalUsers < 20) {
+    adjustedScore -= 5;
+    scoreBreakdown.sizeAdjustment = -5;
+    scoreBreakdown.rationale.push(`Small organization (${totalUsers} users) may have limited budget`);
   }
   
-  // Complexity penalty
+  // Integration complexity
   const integrationCount = result.requirements?.integrations?.length || 0;
-  if (integrationCount > 3) {
+  if (integrationCount > 5) {
     adjustedScore -= 15;
     scoreBreakdown.complexityPenalty = -15;
+    scoreBreakdown.rationale.push(`High integration complexity (${integrationCount} systems) increases risk`);
+  } else if (integrationCount > 3) {
+    adjustedScore -= 8;
+    scoreBreakdown.complexityPenalty = -8;
+    scoreBreakdown.rationale.push(`Moderate integration complexity (${integrationCount} systems)`);
   }
   
-  // Calculate final score
   scoreBreakdown.finalScore = Math.max(0, Math.min(100, adjustedScore));
+  
+  console.log('Score breakdown:', scoreBreakdown);
+  
   result.fitScore = scoreBreakdown.finalScore;
   result.scoreBreakdown = scoreBreakdown;
   
   return result;
 }
+
 
 /**
  * Find REAL similar customers - don't create fake ones
