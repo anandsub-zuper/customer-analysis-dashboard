@@ -8,6 +8,21 @@ import {
 
 const ComprehensiveAnalysisDisplay = ({ analysisResults }) => {
   const [activeTab, setActiveTab] = useState('summary');
+
+   // DEBUG: Log the entire analysisResults object
+  console.log('=== ANALYSIS RESULTS DEBUG ===');
+  console.log('Full analysisResults:', analysisResults);
+  console.log('Has strengths?', analysisResults?.strengths?.length > 0);
+  console.log('Strengths:', analysisResults?.strengths);
+  console.log('Has challenges?', analysisResults?.challenges?.length > 0);
+  console.log('Challenges:', analysisResults?.challenges);
+  console.log('Has currentState?', !!analysisResults?.currentState);
+  console.log('CurrentState:', analysisResults?.currentState);
+  console.log('Has similarCustomers?', analysisResults?.similarCustomers?.length > 0);
+  console.log('Similar Customers:', analysisResults?.similarCustomers);
+  console.log('Has recommendations?', !!analysisResults?.recommendations);
+  console.log('Recommendations:', analysisResults?.recommendations);
+  console.log('=== END DEBUG ===');
   
   if (!analysisResults) return null;
 
@@ -326,10 +341,16 @@ const ActionableInsights = ({ analysisResults, metrics }) => {
 
 // Summary Tab Component - Show actual data only
 const SummaryTab = ({ data }) => {
+
+  console.log('SummaryTab data:', data);
+  console.log('CurrentState in SummaryTab:', data.currentState);
   // Use actual data, don't provide defaults
   const overview = data.summary?.overview || '';
   const keyRequirements = data.requirements?.keyFeatures || [];
   const mainPainPoints = data.summary?.mainPainPoints || [];
+
+    // Check if we have currentState data
+  const hasCurrentSystems = data.currentState?.currentSystems?.length > 0;
 
   if (!overview && keyRequirements.length === 0 && mainPainPoints.length === 0) {
     return (
@@ -368,6 +389,12 @@ const SummaryTab = ({ data }) => {
                 )}
               </div>
             )) || <p className="text-gray-600">No current systems information</p>}
+            {/* DEBUG: Show what we actually have */}
+                {data.currentState && (
+                  <pre className="text-xs mt-2 bg-white p-2 rounded overflow-auto">
+                    {JSON.stringify(data.currentState, null, 2)}
+                  </pre>
+                )}
           </div>
         </div>
 
