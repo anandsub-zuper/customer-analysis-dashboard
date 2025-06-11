@@ -221,7 +221,7 @@ async function initConfigurationCollection(db, existingCollections) {
       console.log('Creating configuration collection...');
       await db.createCollection('configuration');
       
-      // Create default configurations
+      // Create default configurations that MATCH the UI screenshot
       const defaultConfigs = [
         { 
           _id: 'api', 
@@ -239,15 +239,12 @@ async function initConfigurationCollection(db, existingCollections) {
         },
         { 
           _id: 'industries', 
+          // These should match what's shown in the UI configuration
           whitelist: [
-            'Construction',
-            'Field Services',
-            'Property Maintenance',
             'HVAC',
-            'Plumbing',
+            'Plumbing', 
             'Electrical',
-            'Cleaning Services',
-            'Solar'
+            'Roofing'
           ],
           blacklist: [
             'Food Service',
@@ -257,6 +254,7 @@ async function initConfigurationCollection(db, existingCollections) {
         },
         { 
           _id: 'requirements', 
+          // These should match what's shown in the UI configuration
           strengths: [
             'Field Technician Management',
             'Real-time Tracking',
@@ -268,7 +266,7 @@ async function initConfigurationCollection(db, existingCollections) {
           ],
           weaknesses: [
             'Complex Manufacturing',
-            'Advanced Project Management',
+            'Advanced Project Management', 
             'Route Optimization'
           ],
           unsupported: [
@@ -280,91 +278,82 @@ async function initConfigurationCollection(db, existingCollections) {
       ];
       
       await db.collection('configuration').insertMany(defaultConfigs);
-      console.log('Configuration collection created with default settings');
+      console.log('Configuration collection created with UI-matching defaults');
     } else {
-      console.log('Configuration collection already exists, checking default configurations...');
+      console.log('Configuration collection already exists, checking/updating configurations...');
       
-      // Check if default configurations exist and create if missing
-      const configIds = ['api', 'model', 'industries', 'requirements'];
+      // Check and update existing configurations to match UI
+      const configUpdates = [
+        {
+          _id: 'industries',
+          whitelist: ['HVAC', 'Plumbing', 'Electrical', 'Roofing'],
+          blacklist: ['Food Service', 'Pure SaaS', 'Education'],
+          updatedAt: new Date()
+        },
+        {
+          _id: 'requirements',
+          strengths: [
+            'Field Technician Management',
+            'Real-time Tracking', 
+            'Work Order Management',
+            'Mobile App Capability',
+            'Customer Portal',
+            'Scheduling',
+            'Customizable Checklists'
+          ],
+          weaknesses: [
+            'Complex Manufacturing',
+            'Advanced Project Management',
+            'Route Optimization'  
+          ],
+          unsupported: [
+            'Full ERP',
+            'Complex Accounting',
+            'Hospital Management'
+          ],
+          updatedAt: new Date()
+        }
+      ];
       
-      for (const configId of configIds) {
-        const config = await db.collection('configuration').findOne({ _id: configId });
+      for (const config of configUpdates) {
+        const existing = await db.collection('configuration').findOne({ _id: config._id });
         
-        if (!config) {
-          console.log(`Creating missing configuration: ${configId}`);
-          
-          let defaultConfig = {};
-          
-          // Create appropriate default based on config type
-          switch (configId) {
-            case 'api':
-              defaultConfig = {
-                _id: 'api',
-                key: 'sk-sample-api-key',
-                maxUsage: 100,
-                alertThreshold: 80
-              };
-              break;
-            case 'model':
-              defaultConfig = {
-                _id: 'model',
-                type: 'gpt-4-turbo',
-                temperature: 0.7,
-                maxTokens: 2500,
-                depth: 'Standard',
-                timeout: 30000
-              };
-              break;
-            case 'industries':
-              defaultConfig = {
-                _id: 'industries',
-                whitelist: [
-                  'Construction',
-                  'Field Services',
-                  'Property Maintenance',
-                  'HVAC',
-                  'Plumbing',
-                  'Electrical',
-                  'Cleaning Services',
-                  'Solar'
-                ],
-                blacklist: [
-                  'Food Service',
-                  'Pure SaaS',
-                  'Education'
-                ]
-              };
-              break;
-            case 'requirements':
-              defaultConfig = {
-                _id: 'requirements',
-                strengths: [
-                  'Field Technician Management',
-                  'Real-time Tracking',
-                  'Work Order Management',
-                  'Mobile App Capability',
-                  'Customer Portal',
-                  'Scheduling',
-                  'Customizable Checklists'
-                ],
-                weaknesses: [
-                  'Complex Manufacturing',
-                  'Advanced Project Management',
-                  'Route Optimization'
-                ],
-                unsupported: [
-                  'Full ERP',
-                  'Complex Accounting',
-                  'Hospital Management'
-                ]
-              };
-              break;
-          }
-          
-          await db.collection('configuration').insertOne(defaultConfig);
-          console.log(`Configuration '${configId}' created successfully`);
+        if (!existing) {
+          console.log(`Creating missing configuration: ${config._id}`);
+          await db.collection('configuration').insertOne(config);
         } else {
-          console.log(`Configuration '${configId}' already exists`);
+          // Update to ensure it matches the UI configuration
+          console.log(`Updating configuration to match UI: ${config._id}`);
+          await db.collection('configuration').replaceOne(
+            { _id: config._id },
+            config
+          );
+        }
+      }
+      
+      // Handle other configs (api, model) if missing
+      const otherConfigs = [
+        {
+          _id: 'api',
+          key: 'sk-sample-api-key',
+          maxUsage: 100,
+          alertThreshold: 80
+        },
+        {
+          _id: 'model',
+          type: 'gpt-4-turbo',
+          temperature: 0.7,
+          maxTokens: 2500,
+          depth: 'Standard',
+          timeout: 30000
+        }
+      ];
+      
+      for (const config of otherConfigs) {
+        const existing = await db.collection('configuration').findOne({ _id: config._id });
+        if (!existing) {
+          console.log(`Creating missing configuration: ${config._id}`);
+          await db.collection('configuration').insertOne(config);
         }
       }
     }
