@@ -341,16 +341,12 @@ const ActionableInsights = ({ analysisResults, metrics }) => {
 
 // Summary Tab Component - Show actual data only
 const SummaryTab = ({ data }) => {
-
   console.log('SummaryTab data:', data);
-  console.log('CurrentState in SummaryTab:', data.currentState);
-  // Use actual data, don't provide defaults
+  
+  // Use cleaned summary data
   const overview = data.summary?.overview || '';
   const keyRequirements = data.requirements?.keyFeatures || [];
   const mainPainPoints = data.summary?.mainPainPoints || [];
-
-    // Check if we have currentState data
-  const hasCurrentSystems = data.currentState?.currentSystems?.length > 0;
 
   if (!overview && keyRequirements.length === 0 && mainPainPoints.length === 0) {
     return (
@@ -375,9 +371,16 @@ const SummaryTab = ({ data }) => {
             <Briefcase className="h-5 w-5 mr-2 text-blue-600" />
             Current State
           </h4>
-          <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+          <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+            {/* Use cleaned summary instead of raw currentState */}
+            {data.currentState?.summary && (
+              <div>
+                <p className="text-gray-700">{data.currentState.summary}</p>
+              </div>
+            )}
+            
             {data.currentState?.currentSystems?.map((system, idx) => (
-              <div key={idx}>
+              <div key={idx} className="border-l-4 border-orange-400 pl-3">
                 <p className="font-medium">{system.name}</p>
                 <p className="text-sm text-gray-600">{system.usage}</p>
                 {system.painPoints?.length > 0 && (
@@ -388,13 +391,9 @@ const SummaryTab = ({ data }) => {
                   </ul>
                 )}
               </div>
-            )) || <p className="text-gray-600">No current systems information</p>}
-            {/* DEBUG: Show what we actually have */}
-                {data.currentState && (
-                  <pre className="text-xs mt-2 bg-white p-2 rounded overflow-auto">
-                    {JSON.stringify(data.currentState, null, 2)}
-                  </pre>
-                )}
+            )) || (
+              <p className="text-gray-600">No current systems information available</p>
+            )}
           </div>
         </div>
 
@@ -519,10 +518,39 @@ const StrengthsChallengesTab = ({ data }) => {
 
 // Similar Customers Tab
 const SimilarCustomersTab = ({ data }) => {
+  const hasSectionedData = data.similarCustomers && 
+    Array.isArray(data.similarCustomers) && 
+    data.similarCustomers.length > 0 && 
+    data.similarCustomers[0].sectionTitle;
   if (!data.similarCustomers || data.similarCustomers.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
         <p>No similar customer data available</p>
+      </div>
+    );
+  }
+
+  if (hasSectionedData) {
+    return (
+      <div className="space-y-8">
+        <h3 className="text-lg font-semibold">Similar Customer Analysis</h3>
+        
+        {data.similarCustomers.map((section, sectionIdx) => (
+          <div key={sectionIdx} className="space-y-4">
+            {/* Section Header */}
+            <div className="border-l-4 border-blue-500 pl-4">
+              <h4 className="text-lg font-medium text-blue-800">{section.sectionTitle}</h4>
+              <p className="text-sm text-gray-600">{section.sectionDescription}</p>
+            </div>
+            
+            {/* Section Customers */}
+            <div className="grid gap-4 ml-6">
+              {section.customers.map((customer, idx) => (
+                <SimilarCustomerCard key={idx} customer={customer} />
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -593,6 +621,68 @@ const SimilarCustomersTab = ({ data }) => {
     </div>
   );
 };
+
+const SimilarCustomerCard = ({ customer }) => (
+  <div className="border rounded-lg p-5 hover:shadow-md transition-shadow bg-gray-50">
+    <div className="flex justify-between items-start mb-3">
+      <div>
+        <h5 className="font-semibold text-lg">{customer.name}</h5>
+        <p className="text-gray-600">{customer.industry}</p>
+      </div>
+      <div className="text-center">
+        <div className="text-2xl font-bold text-blue-600">
+          {customer.matchPercentage}%
+        </div>
+        <p className="text-xs text-gray-500">Match Score</p>
+      </div>
+    </div>
+    
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+      <div className="bg-white p-3 rounded border">
+        <p className="text-sm text-gray-500">Implementation</p>
+        <p className="font-medium">{customer.implementation?.duration}</p>
+      </div>
+      <div className="bg-white p-3 rounded border">
+        <p className="text-sm text-gray-500">Health Status</p>
+        <p className={`font-medium ${
+          customer.implementation?.health === 'Excellent' ? 'text-green-600' :
+          customer.implementation?.health === 'Good' ? 'text-blue-600' :
+          customer.implementation?.health === 'Average' ? 'text-yellow-600' :
+          'text-red-600'
+        }`}>
+          {customer.implementation?.health}
+        </p>
+      </div>
+      <div className="bg-white p-3 rounded border">
+        <p className="text-sm text-gray-500">ARR</p>
+        <p className="font-medium">{customer.implementation?.arr}</p>
+      </div>
+    </div>
+
+    <div className="mb-3">
+      <p className="text-sm font-medium mb-1">Why Similar:</p>
+      <ul className="text-sm text-gray-600">
+        {customer.matchReasons?.map((reason, i) => (
+          <li key={i}>• {reason}</li>
+        ))}
+      </ul>
+    </div>
+
+    {customer.keyLearnings?.length > 0 && (
+      <div>
+        <p className="text-sm font-medium mb-1">Key Learnings:</p>
+        <div className="flex flex-wrap gap-2">
+          {customer.keyLearnings.map((learning, i) => (
+            <span key={i} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+              {learning}
+            </span>
+          ))}
+        </div>
+      </div>
+    )}
+  </div>
+);
+
 
 // Requirements Tab
 const RequirementsTab = ({ data }) => {
