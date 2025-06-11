@@ -43,19 +43,30 @@ exports.analyzeTranscript = async (req, res) => {
     try {
       const analysisResults = await openaiService.analyzeTranscript(transcriptText);
       
-      // Add document reference and template if provided
-      analysisResults.documentId = documentId || null;
-      analysisResults.templateId = templateId || null;
-      analysisResults.timestamp = new Date();
+      // IMPORTANT: Ensure all data from OpenAI is preserved
+      const completeAnalysis = {
+        ...analysisResults,
+        documentId: documentId || null,
+        templateId: templateId || null,
+        timestamp: new Date(),
+        // Ensure these fields exist even if empty
+        strengths: analysisResults.strengths || [],
+        challenges: analysisResults.challenges || [],
+        recommendations: analysisResults.recommendations || {},
+        currentState: analysisResults.currentState || {},
+        services: analysisResults.services || {},
+        requirements: analysisResults.requirements || {},
+        similarCustomers: analysisResults.similarCustomers || []
+      };
       
       // Save analysis results to MongoDB
-      const savedAnalysis = await analysisService.saveAnalysisResults(analysisResults);
+      const savedAnalysis = await analysisService.saveAnalysisResults(completeAnalysis);
       
       // Return the complete analysis results with MongoDB ID
       res.json({
         success: true,
         message: 'Analysis completed and saved',
-        results: savedAnalysis
+        results: savedAnalysis  // This should include ALL fields from the analysis
       });
     } catch (aiErr) {
       console.error('Error with OpenAI analysis:', aiErr);
