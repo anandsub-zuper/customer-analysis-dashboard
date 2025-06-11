@@ -421,11 +421,11 @@ function extractPatternDatabase(allData) {
       redFlags: []
     };
     
-    // Identify red flags
-    if (record.userCount?.field < 10) pattern.redFlags.push('Too few field workers');
+    // Identify red flags based on data, not industry
+    const fieldRatio = (record.userCount?.field || 0) / (record.userCount?.total || 1);
+    
+    if (fieldRatio < 0.1) pattern.redFlags.push('Very low field worker ratio');
     if (record.requirements?.integrations?.length > 5) pattern.redFlags.push('Complex integration requirements');
-    if (record.industry?.toLowerCase().includes('software') || 
-        record.industry?.toLowerCase().includes('saas')) pattern.redFlags.push('Software/SaaS company');
     if (record.businessMetrics?.daysToOnboard > 120) pattern.redFlags.push('Extended implementation timeline');
     if (record.userCount?.total > 500) pattern.redFlags.push('Very large organization');
     
@@ -600,6 +600,11 @@ function generateComprehensiveAnalytics(historicalData) {
     ? Math.round(fieldWorkerData.reduce((sum, c) => sum + c.userCount.field, 0) / fieldWorkerData.length)
     : 0;
   
+  // Updated: Business model performance instead of industry-specific
+  const fieldOrientedSuccess = successfulCustomers.filter(c => 
+    (c.userCount?.field || 0) / (c.userCount?.total || 1) > 0.5
+  ).length;
+  
   return `
 MARKET INTELLIGENCE:
 - Total Customers Analyzed: ${total}
@@ -642,7 +647,7 @@ KEY INSIGHTS:
 1. Sweet Spot: Customers with $25-50K ARR and 20-100 field users show highest success rates
 2. Critical Period: First 90 days determine long-term health (${Math.round(successfulCustomers.filter(c => c.businessMetrics?.daysToOnboard < 90).length / successfulCustomers.length * 100)}% of successful customers onboard <90 days)
 3. Integration Impact: >3 integrations correlate with ${Math.round(avgImplementation * 1.5)} day implementations
-4. Industry Performance: Field service industries show ${Math.round((successfulCustomers.filter(c => ['HVAC', 'Plumbing', 'Electrical'].some(i => c.industry?.includes(i))).length / successfulCustomers.length) * 100)}% success rate
+4. Field-Oriented Companies: Companies with >50% field workers show ${Math.round(fieldOrientedSuccess / successfulCustomers.length * 100)}% success rate
 5. Payment Feature: ${Math.round(featureAdoption.payments/total*100)}% adoption suggests ${featureAdoption.payments/total > 0.3 ? 'strong market demand' : 'growth opportunity'}
 `;
 }
@@ -754,8 +759,6 @@ async function retrieveFromDocs() {
 
 /**
  * Normalize data from a Google Sheet into customer objects
- * @param {Array} sheetData - Raw sheet data
- * @returns {Array} - Array of normalized customer objects
  */
 function normalizeSheetData(sheetData) {
   const headers = sheetData[0].map(header => header ? header.trim() : '');
@@ -879,33 +882,80 @@ function normalizeSheetData(sheetData) {
   );
 }
 
-// Keep all other helper functions (parseUserCount, calculateComprehensiveFitScore, etc.)
-// These remain unchanged from the original
-
 function parseUserCount(userText, customer) {
-  const patterns = [
-    /(\d+)\s*(?:total)/i,
-    /(\d+)\s*(?:users)/i,
-    /(\d+)\s*(?:employees)/i,
-    /^(\d+)$/
+  // Handle various formats
+  if (typeof userText === 'number') {
+    customer.userCount.total = userText;
+    // Don't assume field/office split
+    return;
+  }
+  
+  const text = String(userText);
+  
+  // Try to find total count with various patterns
+  const totalPatterns = [
+    /(\d+)\s*(?:total|employees?|staff|users?|people|workers?)/i,
+    /(?:total|employees?|staff|users?|people|workers?)[\s:]+(\d+)/i,
+    /^(\d+)$/  // Just a number
   ];
   
-  for (const pattern of patterns) {
-    const match = userText.match(pattern);
+  for (const pattern of totalPatterns) {
+    const match = text.match(pattern);
     if (match) {
       customer.userCount.total = parseInt(match[1], 10);
       break;
     }
   }
   
-  const backOfficeMatch = userText.match(/(\d+)\s*(?:back\s*office|backoffice|office|admin)/i);
-  if (backOfficeMatch) customer.userCount.backOffice = parseInt(backOfficeMatch[1], 10);
+  // Extract back office/admin count
+  const backOfficePatterns = [
+    /(\d+)\s*(?:back\s*office|backoffice|office|admin|administrative|desk)/i,
+    /(?:back\s*office|backoffice|office|admin|administrative|desk)[\s:]+(\d+)/i
+  ];
   
-  const fieldMatch = userText.match(/(\d+)\s*(?:field|technician|mobile)/i);
-  if (fieldMatch) customer.userCount.field = parseInt(fieldMatch[1], 10);
+  for (const pattern of backOfficePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      customer.userCount.backOffice = parseInt(match[1], 10);
+      break;
+    }
+  }
   
-  if (customer.userCount.total > 0 && customer.userCount.backOffice === 0 && customer.userCount.field === 0) {
-    customer.userCount.field = customer.userCount.total;
+  // Extract field count
+  const fieldPatterns = [
+    /(\d+)\s*(?:field|technician|mobile|cleaner|janitor|maintenance|service)/i,
+    /(?:field|technician|mobile|cleaner|janitor|maintenance|service)[\s:]+(\d+)/i
+  ];
+  
+  for (const pattern of fieldPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      customer.userCount.field = parseInt(match[1], 10);
+      break;
+    }
+  }
+  
+  // If we have total but no field/office breakdown, don't make assumptions
+  // Let the matching algorithm handle companies without field/office split
+  if (customer.userCount.total > 0 && 
+      customer.userCount.backOffice === 0 && 
+      customer.userCount.field === 0) {
+    
+    // Don't assume - leave the split as 0/0 and let the matching algorithm
+    // compare based on total count only
+    // This avoids making incorrect assumptions about business models
+    console.log(`No field/office breakdown for ${customer.customerName} (${customer.userCount.total} total users)`);
+  }
+  
+  // If field + backOffice doesn't equal total, adjust
+  if (customer.userCount.total > 0 && 
+      customer.userCount.field > 0 && 
+      customer.userCount.backOffice > 0) {
+    const sum = customer.userCount.field + customer.userCount.backOffice;
+    if (sum !== customer.userCount.total) {
+      // Adjust field count to match total
+      customer.userCount.field = customer.userCount.total - customer.userCount.backOffice;
+    }
   }
 }
 
@@ -1088,6 +1138,79 @@ function extractCustomerDataFromDoc(content, docName) {
     console.error(`Error extracting customer data from document ${docName}:`, error);
     return null;
   }
+}
+
+// Updated: Generic key learnings based on data, not industry
+function generateKeyLearnings(historical) {
+  const learnings = [];
+  
+  // Health-based learnings
+  if (historical.businessMetrics?.health === 'Excellent') {
+    learnings.push('Achieved excellent outcomes');
+  } else if (historical.businessMetrics?.health === 'Good') {
+    learnings.push('Successful implementation');
+  } else if (historical.businessMetrics?.health === 'Poor') {
+    learnings.push('Faced implementation challenges');
+  }
+  
+  // Timeline-based learnings
+  if (historical.businessMetrics?.daysToOnboard) {
+    if (historical.businessMetrics.daysToOnboard < 60) {
+      learnings.push(`Quick deployment: ${historical.businessMetrics.daysToOnboard} days`);
+    } else if (historical.businessMetrics.daysToOnboard > 120) {
+      learnings.push(`Extended timeline: ${historical.businessMetrics.daysToOnboard} days`);
+    }
+  }
+  
+  // Feature adoption
+  if (historical.requirements?.checklists?.needed) {
+    learnings.push('Heavy checklist usage');
+  }
+  if (historical.requirements?.integrations?.length > 2) {
+    learnings.push('Multiple integrations required');
+  }
+  
+  // Business model based on field ratio instead of industry
+  const fieldRatio = (historical.userCount?.field || 0) / (historical.userCount?.total || 1);
+  if (fieldRatio > 0.7) {
+    learnings.push('Field-heavy operation');
+  } else if (fieldRatio < 0.3) {
+    learnings.push('Office-based operation');
+  } else if (fieldRatio > 0) {
+    learnings.push('Mixed field/office model');
+  }
+  
+  return learnings.length > 0 ? learnings : ['Standard customer profile'];
+}
+
+// Updated: Generic strategic insights
+function generateStrategicInsight(currentCustomer, historicalCustomer) {
+  const insights = [];
+  
+  // Health-based insights
+  if (historicalCustomer.businessMetrics?.health === 'Excellent') {
+    insights.push('This similar customer achieved excellent outcomes');
+  } else if (historicalCustomer.businessMetrics?.health === 'Poor') {
+    insights.push('This similar customer struggled - learn from their challenges');
+  }
+  
+  // Size comparison
+  const currentSize = currentCustomer.userCount?.total || 0;
+  const historicalSize = historicalCustomer.userCount?.total || 0;
+  
+  if (Math.abs(currentSize - historicalSize) < 20) {
+    insights.push('Very similar size - implementation approach likely transferable');
+  }
+  
+  // Integration complexity
+  const currentIntegrations = currentCustomer.requirements?.integrations?.length || 0;
+  const historicalIntegrations = historicalCustomer.requirements?.integrations?.length || 0;
+  
+  if (currentIntegrations > historicalIntegrations + 2) {
+    insights.push('More complex integration needs than this reference');
+  }
+  
+  return insights.join('. ') || 'Review implementation details for relevant insights';
 }
 
 module.exports = historicalDataService;
