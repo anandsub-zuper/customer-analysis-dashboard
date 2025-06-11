@@ -705,99 +705,333 @@ function enrichWithSimilarCustomers(result, historicalData) {
  */
 function calculateMatchScore(customer, historical) {
   let score = 0;
+  let debugInfo = [];
   
-  // Industry match (40 points)
-  const custInd = (customer.industry || '').toLowerCase();
-  const histInd = (historical.industry || '').toLowerCase();
+  // Industry match (40 points max) - Generic approach
+  const custInd = (customer.industry || '').toLowerCase().trim();
+  const histInd = (historical.industry || '').toLowerCase().trim();
   
   if (custInd && histInd) {
+    // Exact match
     if (custInd === histInd) {
       score += 40;
+      debugInfo.push(`Industry exact match: ${custInd} = ${histInd}`);
     } else {
-      // Check for partial matches
-      const custWords = custInd.split(/[\s,\/]+/);
-      const histWords = histInd.split(/[\s,\/]+/);
-      const matches = custWords.filter(w => histWords.some(h => h.includes(w) || w.includes(h)));
-      if (matches.length > 0) {
-        score += 20;
+      // Generic word-based similarity scoring
+      const custWords = custInd.split(/[\s,\/\-&]+/).filter(w => w.length > 2);
+      const histWords = histInd.split(/[\s,\/\-&]+/).filter(w => w.length > 2);
+      
+      // Calculate Jaccard similarity coefficient
+      const allWords = new Set([...custWords, ...histWords]);
+      const commonWords = new Set();
+      
+      // Find common words and similar words
+      for (const cw of custWords) {
+        for (const hw of histWords) {
+          // Exact match
+          if (cw === hw) {
+            commonWords.add(cw);
+          }
+          // Substring match (one contains the other)
+          else if (cw.length >= 4 && hw.length >= 4) {
+            if (cw.includes(hw) || hw.includes(cw)) {
+              commonWords.add(cw);
+            }
+          }
+          // Prefix match for longer words
+          else if (cw.length >= 5 && hw.length >= 5) {
+            const prefixLen = Math.min(4, Math.min(cw.length, hw.length) - 1);
+            if (cw.substring(0, prefixLen) === hw.substring(0, prefixLen)) {
+              commonWords.add(cw);
+            }
+          }
+        }
+      }
+      
+      // Calculate similarity score
+      if (allWords.size > 0) {
+        const similarity = commonWords.size / allWords.size;
+        const points = Math.round(similarity * 35); // Max 35 points for partial match
+        score += points;
+        debugInfo.push(`Industry similarity (${commonWords.size}/${allWords.size} words): +${points} points`);
+      }
+      
+      // Bonus for having any common significant words
+      if (commonWords.size > 0 && score < 15) {
+        score += 10; // Minimum 10 points if there's any match
+        debugInfo.push('Industry has common terms: +10 bonus points');
       }
     }
   }
   
-  // Size match (30 points)
-  const sizeDiff = Math.abs((customer.userCount?.total || 0) - (historical.userCount?.total || 0));
-  if (sizeDiff < 20) score += 30;
-  else if (sizeDiff < 50) score += 20;
-  else if (sizeDiff < 100) score += 10;
+  // Size match (30 points max) - Ratio-based approach
+  const custTotal = customer.userCount?.total || 0;
+  const histTotal = historical.userCount?.total || 0;
   
-  // Field ratio match (20 points)
+  if (custTotal > 0 && histTotal > 0) {
+    // Use logarithmic scale for size comparison to handle large differences better
+    const logCust = Math.log10(custTotal + 1);
+    const logHist = Math.log10(histTotal + 1);
+    const logDiff = Math.abs(logCust - logHist);
+    
+    // Score based on logarithmic difference
+    if (logDiff < 0.2) {  // Very similar size (within ~58% difference)
+      score += 30;
+      debugInfo.push(`Size very similar (log diff ${logDiff.toFixed(2)}): +30 points`);
+    } else if (logDiff < 0.4) {  // Similar size (within ~150% difference)
+      score += 20;
+      debugInfo.push(`Size similar (log diff ${logDiff.toFixed(2)}): +20 points`);
+    } else if (logDiff < 0.6) {  // Somewhat similar (within ~300% difference)
+      score += 10;
+      debugInfo.push(`Size somewhat similar (log diff ${logDiff.toFixed(2)}): +10 points`);
+    } else if (logDiff < 0.8) {
+      score += 5;
+      debugInfo.push(`Size difference moderate (log diff ${logDiff.toFixed(2)}): +5 points`);
+    }
+  }
+  
+  // Field ratio match (20 points max) - Percentage-based
   const custFieldRatio = (customer.userCount?.field || 0) / (customer.userCount?.total || 1);
   const histFieldRatio = (historical.userCount?.field || 0) / (historical.userCount?.total || 1);
-  const ratioDiff = Math.abs(custFieldRatio - histFieldRatio);
   
-  if (ratioDiff < 0.1) score += 20;
-  else if (ratioDiff < 0.2) score += 10;
+  // Both have high field ratios (field service companies)
+  if (custFieldRatio > 0.5 && histFieldRatio > 0.5) {
+    const ratioDiff = Math.abs(custFieldRatio - histFieldRatio);
+    if (ratioDiff < 0.15) {
+      score += 20;
+      debugInfo.push(`Both field-heavy with similar ratios (diff ${ratioDiff.toFixed(2)}): +20 points`);
+    } else if (ratioDiff < 0.30) {
+      score += 15;
+      debugInfo.push(`Both field-heavy (diff ${ratioDiff.toFixed(2)}): +15 points`);
+    } else {
+      score += 10;
+      debugInfo.push(`Both field-heavy but different ratios: +10 points`);
+    }
+  }
+  // Both have low field ratios (office-based companies)
+  else if (custFieldRatio < 0.3 && histFieldRatio < 0.3) {
+    score += 15;
+    debugInfo.push(`Both office-heavy companies: +15 points`);
+  }
+  // Mixed field/office with similar balance
+  else {
+    const ratioDiff = Math.abs(custFieldRatio - histFieldRatio);
+    if (ratioDiff < 0.20) {
+      score += 10;
+      debugInfo.push(`Similar field/office balance (diff ${ratioDiff.toFixed(2)}): +10 points`);
+    }
+  }
   
-  // Service match (10 points)
-  if (customer.services?.types && historical.services?.length > 0) {
-    const matches = customer.services.types.filter(s => 
-      historical.services.some(hs => 
-        hs.toLowerCase().includes(s.toLowerCase()) || 
-        s.toLowerCase().includes(hs.toLowerCase())
-      )
-    );
-    if (matches.length > 0) score += 10;
+  // Service match (10 points max) - Generic service comparison
+  const custServices = customer.services?.types || customer.services || [];
+  const histServices = historical.services || [];
+  
+  if (custServices.length > 0 && histServices.length > 0) {
+    const serviceMatches = new Set();
+    
+    // Normalize services for comparison
+    const normalizeService = (service) => {
+      return service.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 2)
+        .sort()
+        .join(' ');
+    };
+    
+    // Compare normalized services
+    for (const cs of custServices) {
+      const csNorm = normalizeService(cs);
+      for (const hs of histServices) {
+        const hsNorm = normalizeService(typeof hs === 'string' ? hs : hs.name || '');
+        
+        // Check for similarity
+        if (csNorm && hsNorm) {
+          if (csNorm === hsNorm) {
+            serviceMatches.add(cs);
+          } else {
+            // Check word overlap
+            const csWords = csNorm.split(' ');
+            const hsWords = hsNorm.split(' ');
+            const commonWords = csWords.filter(w => hsWords.includes(w));
+            
+            if (commonWords.length >= Math.min(csWords.length, hsWords.length) * 0.5) {
+              serviceMatches.add(cs);
+            }
+          }
+        }
+      }
+    }
+    
+    if (serviceMatches.size > 0) {
+      const matchRatio = serviceMatches.size / Math.min(custServices.length, histServices.length);
+      const points = Math.round(matchRatio * 10);
+      score += points;
+      debugInfo.push(`Service matches (${serviceMatches.size}/${custServices.length}): +${points} points`);
+    }
+  }
+  
+  // Requirements/Features match (bonus 5 points) - Optional
+  if (customer.requirements?.keyFeatures && historical.requirements?.keyFeatures) {
+    const custFeatures = customer.requirements.keyFeatures.length;
+    const histFeatures = historical.requirements.keyFeatures.length;
+    
+    if (custFeatures > 0 && histFeatures > 0) {
+      const featureDiff = Math.abs(custFeatures - histFeatures);
+      if (featureDiff <= 2) {
+        score += 5;
+        debugInfo.push(`Similar feature complexity: +5 bonus points`);
+      }
+    }
+  }
+  
+  // Log debug info for high-scoring matches
+  if (score > 30) {
+    console.log(`Match score ${score} for ${customer.customerName} vs ${historical.customerName}:`, debugInfo);
   }
   
   return Math.min(score, 100);
 }
 
-/**
- * Generate match reasons between customers
- */
+// Also update the enrichWithSimilarCustomers function
+function enrichWithSimilarCustomers(result, historicalData) {
+  console.log(`Finding similar customers for ${result.customerName} (${result.industry})`);
+  console.log(`Customer profile: ${result.userCount?.total} users (${result.userCount?.field} field, ${result.userCount?.backOffice} office)`);
+  
+  // Calculate match scores for all historical customers
+  const scoredCustomers = historicalData
+    .filter(h => h.customerName && h.customerName !== result.customerName) // Exclude self
+    .map(h => ({
+      historical: h,
+      score: calculateMatchScore(result, h)
+    }))
+    .filter(item => item.score > 20) // Lower threshold for more matches
+    .sort((a, b) => b.score - a.score);
+  
+  console.log(`Found ${scoredCustomers.length} potential matches with score > 20`);
+  
+  // Log top 10 scores for debugging
+  console.log('Top 10 match scores:');
+  scoredCustomers.slice(0, 10).forEach((item, idx) => {
+    console.log(`  ${idx + 1}. ${item.historical.customerName} (${item.historical.industry}): ${item.score} points`);
+  });
+  
+  // Take top 5 matches
+  const similarCustomers = scoredCustomers
+    .slice(0, 5)
+    .map(item => ({
+      name: item.historical.customerName || 'Historical Customer',
+      industry: item.historical.industry || 'Not specified',
+      matchPercentage: item.score,
+      matchReasons: generateMatchReasons(result, item.historical),
+      implementation: {
+        duration: item.historical.businessMetrics?.daysToOnboard 
+          ? `${item.historical.businessMetrics.daysToOnboard} days` 
+          : 'Not available',
+        health: item.historical.businessMetrics?.health || 'Not available',
+        arr: item.historical.businessMetrics?.arr 
+          ? `$${item.historical.businessMetrics.arr.toLocaleString()}` 
+          : 'Not available'
+      },
+      keyLearnings: generateKeyLearnings(item.historical),
+      strategicInsight: generateStrategicInsight(result, item.historical)
+    }));
+  
+  result.similarCustomers = similarCustomers;
+  
+  // If no similar customers found, add a message
+  if (similarCustomers.length === 0) {
+    console.log('No similar customers found in historical data');
+    result.similarCustomersMessage = 'No closely matching customers found in historical data. This may be a unique use case.';
+  }
+  
+  // Add historical context to recommendations
+  if (result.recommendations && similarCustomers.length > 0) {
+    const successfulSimilar = similarCustomers.filter(c => 
+      ['Excellent', 'Good'].includes(c.implementation.health)
+    );
+    const struggingSimilar = similarCustomers.filter(c => 
+      ['Poor', 'Average'].includes(c.implementation.health)
+    );
+    
+    if (!result.recommendations.historicalContext) {
+      result.recommendations.historicalContext = {
+        successfulSimilarCount: successfulSimilar.length,
+        strugglingSimilarCount: struggingSimilar.length,
+        insights: []
+      };
+      
+      if (successfulSimilar.length > 0) {
+        result.recommendations.historicalContext.insights.push(
+          `${successfulSimilar.length} similar customers achieved success with average implementation of ${
+            successfulSimilar[0].implementation.duration
+          }`
+        );
+      }
+      
+      if (struggingSimilar.length > 0) {
+        result.recommendations.historicalContext.insights.push(
+          `${struggingSimilar.length} similar customers faced challenges - review their experiences before proceeding`
+        );
+      }
+    }
+  }
+  
+  return result;
+}
+
+// Update generateMatchReasons to be more generic
 function generateMatchReasons(customer, historical) {
   const reasons = [];
   
-  // Industry
+  // Industry similarity
   const custInd = (customer.industry || '').toLowerCase();
   const histInd = (historical.industry || '').toLowerCase();
   
   if (custInd && histInd) {
     if (custInd === histInd) {
       reasons.push(`Same industry: ${historical.industry}`);
-    } else if (custInd.includes(histInd.split(' ')[0]) || histInd.includes(custInd.split(' ')[0])) {
-      reasons.push(`Similar industry: ${historical.industry}`);
+    } else {
+      // Check for word overlap
+      const custWords = custInd.split(/[\s,\/\-&]+/).filter(w => w.length > 2);
+      const histWords = histInd.split(/[\s,\/\-&]+/).filter(w => w.length > 2);
+      const commonWords = custWords.filter(w => histWords.some(hw => w === hw || w.includes(hw) || hw.includes(w)));
+      
+      if (commonWords.length > 0) {
+        reasons.push(`Related industry: ${historical.industry}`);
+      }
     }
   }
   
-  // Size
-  const sizeDiff = Math.abs((customer.userCount?.total || 0) - (historical.userCount?.total || 0));
-  if (sizeDiff < 50) {
-    reasons.push(`Similar size: ${historical.userCount?.total || 0} users`);
+  // Size similarity
+  const custTotal = customer.userCount?.total || 0;
+  const histTotal = historical.userCount?.total || 0;
+  
+  if (custTotal > 0 && histTotal > 0) {
+    const ratio = Math.min(custTotal, histTotal) / Math.max(custTotal, histTotal);
+    if (ratio > 0.5) {
+      reasons.push(`Similar size: ${histTotal} users`);
+    }
   }
   
-  // Field ratio
+  // Business model similarity (field vs office ratio)
   const custFieldRatio = (customer.userCount?.field || 0) / (customer.userCount?.total || 1);
   const histFieldRatio = (historical.userCount?.field || 0) / (historical.userCount?.total || 1);
   
-  if (Math.abs(custFieldRatio - histFieldRatio) < 0.2) {
-    reasons.push(`Similar field/office ratio: ${Math.round(histFieldRatio * 100)}% field`);
+  if (custFieldRatio > 0.5 && histFieldRatio > 0.5) {
+    reasons.push(`Field service focused (${Math.round(histFieldRatio * 100)}% field workers)`);
+  } else if (custFieldRatio < 0.3 && histFieldRatio < 0.3) {
+    reasons.push(`Office-based operations`);
+  } else if (Math.abs(custFieldRatio - histFieldRatio) < 0.2) {
+    reasons.push(`Similar operational structure`);
   }
   
-  // Services
-  if (customer.services?.types && historical.services?.length > 0) {
-    const matches = customer.services.types.filter(s => 
-      historical.services.some(hs => 
-        hs.toLowerCase().includes(s.toLowerCase()) || 
-        s.toLowerCase().includes(hs.toLowerCase())
-      )
-    );
-    if (matches.length > 0) {
-      reasons.push(`Similar services offered`);
-    }
+  // Service similarity
+  if (customer.services?.types?.length > 0 && historical.services?.length > 0) {
+    reasons.push(`Similar service offerings`);
   }
   
-  return reasons.length > 0 ? reasons : ['General business similarity'];
+  return reasons.length > 0 ? reasons : ['General business profile match'];
 }
 
 /**
