@@ -8,8 +8,9 @@ exports.saveAnalysisResults = async (analysisData) => {
     const db = await getDb();
     const collection = db.collection('analyses');
     
-    // Format the data for MongoDB
+    // IMPORTANT: Preserve ALL data from OpenAI, don't restructure it
     const analysisToSave = {
+      // Core identification fields
       customerId: analysisData.customerId || null,
       customerName: analysisData.customerName,
       industry: analysisData.industry,
@@ -17,19 +18,34 @@ exports.saveAnalysisResults = async (analysisData) => {
       sourceReference: analysisData.documentId || null,
       templateId: analysisData.templateId || null,
       fitScore: analysisData.fitScore,
+      
+      // Preserve complete data structures from OpenAI
       userCount: analysisData.userCount || {},
+      currentState: analysisData.currentState || {},
+      services: analysisData.services || {},
       requirements: analysisData.requirements || {},
-      services: analysisData.services || [],
-      currentSystems: analysisData.currentSystems || [],
-      timeline: analysisData.timeline || '',
-      results: {
-        summary: analysisData.summary || '',
-        strengths: analysisData.strengths || [],
-        challenges: analysisData.challenges || [],
-        recommendations: analysisData.recommendations || []
-      },
-      similarCustomers: analysisData.similarCustomers || []
+      timeline: analysisData.timeline || {},
+      budget: analysisData.budget || {},
+      summary: analysisData.summary || {},
+      
+      // Arrays that must be preserved
+      strengths: analysisData.strengths || [],
+      challenges: analysisData.challenges || [],
+      similarCustomers: analysisData.similarCustomers || [],
+      
+      // Complete recommendations object
+      recommendations: analysisData.recommendations || {},
+      
+      // Score breakdown for debugging
+      scoreBreakdown: analysisData.scoreBreakdown || {},
+      
+      // Keep any other fields that might exist
+      ...analysisData
     };
+    
+    // Remove duplicate fields
+    delete analysisToSave.documentId;
+    delete analysisToSave.templateId;
     
     // Insert the document
     const result = await collection.insertOne(analysisToSave);
@@ -37,11 +53,18 @@ exports.saveAnalysisResults = async (analysisData) => {
     // Update dashboard metrics
     await updateDashboardMetrics(analysisData);
     
-    // Return the inserted document with its ID
-    return { 
-      id: result.insertedId.toString(), 
-      ...analysisToSave 
+    // Return the complete saved document with its ID
+    const savedDoc = {
+      id: result.insertedId.toString(),
+      ...analysisToSave
     };
+    
+    console.log('Saved analysis with fields:', Object.keys(savedDoc));
+    console.log('Strengths count:', savedDoc.strengths?.length || 0);
+    console.log('Challenges count:', savedDoc.challenges?.length || 0);
+    console.log('Similar customers count:', savedDoc.similarCustomers?.length || 0);
+    
+    return savedDoc;
   } catch (error) {
     console.error('Error saving analysis:', error);
     throw error;
@@ -64,12 +87,20 @@ exports.getAnalysisById = async (id) => {
       throw new Error('Analysis not found');
     }
     
-    // Return with string ID for API consistency
-    return { 
-      id: analysis._id.toString(), 
-      ...analysis,
-      _id: undefined // Remove the MongoDB _id field
+    // Return complete document with string ID for API consistency
+    const result = { 
+      id: analysis._id.toString(),
+      ...analysis
     };
+    
+    // Remove the MongoDB _id field to avoid confusion
+    delete result._id;
+    
+    console.log('Retrieved analysis with fields:', Object.keys(result));
+    console.log('Strengths count:', result.strengths?.length || 0);
+    console.log('Challenges count:', result.challenges?.length || 0);
+    
+    return result;
   } catch (error) {
     console.error('Error getting analysis:', error);
     throw error;
