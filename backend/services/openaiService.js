@@ -62,49 +62,12 @@ const openaiService = {
       const prompt = createEnhancedPrompt(text, formattedHistoricalData, formattedCriteria);
       
       // Phase 8: Call OpenAI API with enhanced error handling and retry logic
-      console.log('Phase 5: Sending comprehensive analysis request to OpenAI...');
-      let response;
-      let retries = 0;
-      const maxRetries = 2;
-      
-      while (retries <= maxRetries) {
-        try {
-          response = await callOpenAI(prompt);
-          
-          // Validate that we got a proper response
-          if (!response || !response.choices || !response.choices[0] || !response.choices[0].message) {
-            throw new Error('OpenAI returned invalid response structure');
-          }
-          
-          console.log('✅ Valid OpenAI response received');
-          break;
-        } catch (error) {
-          console.error(`OpenAI API call attempt ${retries + 1} failed:`, error.message);
-          
-          // Log more details about the error
-          if (error.response) {
-            console.error('Error response status:', error.response.status);
-            console.error('Error response data:', error.response.data);
-          }
-          
-          if (retries < maxRetries) {
-            const waitTime = (retries + 1) * 2000; // Increasing wait time
-            console.log(`Retrying in ${waitTime/1000} seconds...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-            retries++;
-          } else {
-            console.error('❌ All OpenAI API retry attempts failed');
-            throw error;
-          }
-        }
-      }
-      
-      // Phase 9: Process response with enhanced parsing and score-based enforcement
-      const result = processOpenAIResponseRobustly(response);
-      console.log('Successfully processed OpenAI response.');
-      console.log('Extracted customer name:', result.customerName);
-      console.log('Extracted industry:', result.industry);
-      console.log('OpenAI fit score:', result.fitScore);
+        console.log('Phase 5: Sending comprehensive analysis request to OpenAI with validation...');
+        const result = await callOpenAIWithValidation(prompt);
+        console.log('Successfully processed OpenAI response.');
+        console.log('Extracted customer name:', result.customerName);
+        console.log('Extracted industry:', result.industry);
+        console.log('OpenAI fit score:', result.fitScore);
       
       // Phase 10: Apply DYNAMIC criteria adjustments and score-based recommendations
       const adjustedResult = applyComprehensiveCriteriaAdjustments(result, criteria);
@@ -130,6 +93,7 @@ const openaiService = {
       console.log('Strengths Count:', validatedResult.strengths?.length || 0);
       console.log('Challenges Count:', validatedResult.challenges?.length || 0);
       console.log('Similar Customers Sections:', validatedResult.similarCustomers?.length || 0);
+      console.log('Implementation Phases:', validatedResult.recommendations?.implementationApproach?.phases?.length || 0);
       console.log('Was Truncated:', validatedResult._wasTruncated || false);
       
       return validatedResult;
@@ -350,7 +314,8 @@ CRITICAL INSTRUCTIONS FOR RECOMMENDATIONS:
 11. If something wasn't mentioned, leave the array empty rather than adding generic content
 12. ALWAYS include strategic sales guidance in recommendations based on fit score
 13. Score honestly using ONLY the configured criteria - do not assume industries are good fits
-14. ENSURE YOUR JSON IS COMPLETE - if approaching token limits, prioritize completing the structure
+14. CRITICAL: implementationApproach.phases MUST have exactly 4 complete phases with all fields
+15. Each phase MUST have: phase (number), name (string), duration (string), activities (array of strings)
 
 ${criteriaData}
 
@@ -366,6 +331,7 @@ ENSURE your recommendations section includes:
 1. Explicit mention if industry is outside preferred criteria
 2. Recommendation (PURSUE/CONDITIONAL/DECLINE) that matches your fit score
 3. Clear reasoning that references the configured criteria
+4. COMPLETE implementation phases (exactly 4 phases, no exceptions)
 
 Return a JSON object with this EXACT structure (ensure all text fields are readable, NO nested JSON):
 
@@ -444,8 +410,8 @@ Return a JSON object with this EXACT structure (ensure all text fields are reada
   },
   "summary": {
     "overview": "Accurate 2-3 sentence summary of their business and needs (NO JSON)",
-    "keyRequirements": ["Their TOP requirements from the transcript"],
-    "mainPainPoints": ["Their actual pain points mentioned"]
+    "keyRequirements": ["Their TOP 3-5 requirements from the transcript for executive summary"],
+    "mainPainPoints": ["Their TOP 3-5 pain points mentioned for sales positioning"]
   },
   "strengths": [
     {
@@ -483,9 +449,47 @@ Return a JSON object with this EXACT structure (ensure all text fields are reada
       "phases": [
         {
           "phase": 1,
-          "name": "Phase name relevant to their needs",
-          "duration": "Realistic duration based on their requirements",
-          "activities": ["Activities specific to their situation"]
+          "name": "Phase 1 name relevant to their specific needs",
+          "duration": "Realistic duration based on their requirements (e.g., 2-3 weeks)",
+          "activities": [
+            "Specific activity 1 for their situation",
+            "Specific activity 2 for their situation", 
+            "Specific activity 3 for their situation",
+            "Specific activity 4 for their situation"
+          ]
+        },
+        {
+          "phase": 2,
+          "name": "Phase 2 name relevant to their specific needs",
+          "duration": "Realistic duration based on their requirements (e.g., 4-6 weeks)",
+          "activities": [
+            "Specific activity 1 for their situation",
+            "Specific activity 2 for their situation",
+            "Specific activity 3 for their situation", 
+            "Specific activity 4 for their situation"
+          ]
+        },
+        {
+          "phase": 3,
+          "name": "Phase 3 name relevant to their specific needs",
+          "duration": "Realistic duration based on their requirements (e.g., 2-4 weeks)",
+          "activities": [
+            "Specific activity 1 for their situation",
+            "Specific activity 2 for their situation",
+            "Specific activity 3 for their situation",
+            "Specific activity 4 for their situation"
+          ]
+        },
+        {
+          "phase": 4,
+          "name": "Phase 4 name relevant to their specific needs", 
+          "duration": "Realistic duration based on their requirements (e.g., 1-2 weeks)",
+          "activities": [
+            "Specific activity 1 for their situation",
+            "Specific activity 2 for their situation",
+            "Specific activity 3 for their situation",
+            "Specific activity 4 for their situation"
+          ]
         }
       ]
     },
@@ -493,10 +497,90 @@ Return a JSON object with this EXACT structure (ensure all text fields are reada
       "recommendedTier": "Starter/Professional/Enterprise",
       "specialConsiderations": "Pricing considerations for their specific situation",
       "justification": "Why this pricing fits their needs and budget"
+    },
+    "alternativeOptions": {
+      "ifPursuing": "Alternative approach if pursuing this customer",
+      "ifDeclining": "Recommended approach if declining",
+      "partnerReferral": "Partner referral options if applicable"
     }
   },
   "fitScore": Calculate honest score using CONFIGURED criteria and industry rules
-}`;
+}
+
+ABSOLUTE REQUIREMENT: The implementationApproach.phases array MUST contain exactly 4 phases. Each phase MUST be complete with phase number, name, duration, and activities array. DO NOT truncate or skip this section. If you are running out of space, prioritize completing the implementation phases over other detailed descriptions.`;
+}
+
+/**
+ * Enhanced response validation that checks for complete implementation phases
+ */
+function validateImplementationPhases(result) {
+  const phases = result.recommendations?.implementationApproach?.phases;
+  
+  if (!phases || !Array.isArray(phases)) {
+    console.error('❌ No implementation phases found in OpenAI response');
+    return false;
+  }
+  
+  if (phases.length !== 4) {
+    console.error(`❌ Implementation phases incomplete: ${phases.length}/4 phases`);
+    return false;
+  }
+  
+  // Check each phase has required fields
+  for (let i = 0; i < phases.length; i++) {
+    const phase = phases[i];
+    if (!phase.phase || !phase.name || !phase.duration || !Array.isArray(phase.activities)) {
+      console.error(`❌ Phase ${i + 1} missing required fields:`, {
+        hasPhaseNumber: !!phase.phase,
+        hasName: !!phase.name,
+        hasDuration: !!phase.duration,
+        hasActivities: Array.isArray(phase.activities)
+      });
+      return false;
+    }
+    
+    if (phase.activities.length === 0) {
+      console.error(`❌ Phase ${i + 1} has no activities`);
+      return false;
+    }
+  }
+  
+  console.log('✅ Implementation phases validation passed: 4 complete phases');
+  return true;
+}
+async function callOpenAIWithValidation(prompt) {
+  let attempts = 0;
+  const maxAttempts = 3;
+  
+  while (attempts < maxAttempts) {
+    attempts++;
+    console.log(`OpenAI attempt ${attempts}/${maxAttempts}`);
+    
+    try {
+      const response = await callOpenAI(prompt);
+      const result = processOpenAIResponseRobustly(response);
+      
+      // Validate implementation phases
+      if (validateImplementationPhases(result)) {
+        console.log('✅ OpenAI response validation passed');
+        return result;
+      } else {
+        console.log(`⚠️  Attempt ${attempts}: Implementation phases incomplete, retrying...`);
+        if (attempts === maxAttempts) {
+          console.error('❌ All attempts failed to generate complete implementation phases');
+          throw new Error('OpenAI failed to generate complete implementation phases after multiple attempts');
+        }
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    } catch (error) {
+      if (attempts === maxAttempts) {
+        throw error;
+      }
+      console.error(`Attempt ${attempts} failed:`, error.message);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
 }
 
 /**
