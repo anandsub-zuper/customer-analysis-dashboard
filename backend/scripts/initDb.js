@@ -8,126 +8,160 @@ if (!uri) {
   process.exit(1);
 }
 
-// Database Name - can be extracted from the URI or set explicitly
+// Database Name
 const dbName = uri.split('/').pop().split('?')[0] || 'customer_analysis_db';
 
-console.log(`Initializing database: ${dbName}`);
+console.log(`Initializing database structure: ${dbName}`);
 
-// MongoDB client
 const client = new MongoClient(uri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });
 
 async function initDatabase() {
-  let dbConnection = null;
-  
   try {
-    // Connect to MongoDB
     await client.connect();
-    console.log('Connected to MongoDB Atlas');
+    console.log('✅ Connected to MongoDB Atlas');
     
-    // Get database reference
     const db = client.db(dbName);
-    dbConnection = db;
     
     // Check existing collections
     const collections = await db.listCollections().toArray();
     const collectionNames = collections.map(c => c.name);
-    console.log('Existing collections:', collectionNames.join(', ') || 'none');
+    console.log('📁 Existing collections:', collectionNames.join(', ') || 'none');
     
-    // Initialize collections
+    // Initialize database structure only
     await initAnalysesCollection(db, collectionNames);
     await initTemplatesCollection(db, collectionNames);
-    await initConfigurationCollection(db, collectionNames);
+    await initConfigurationStructure(db, collectionNames);
     await initDashboardMetricsCollection(db, collectionNames);
     
-    console.log('Database initialization completed successfully');
+    console.log('✅ Database structure initialization completed');
     
-    // Verify initialization
-    console.log('\nVerifying initialization...');
-    const templateCount = await db.collection('templates').countDocuments();
+    // Verify structure
+    const finalCollections = await db.listCollections().toArray();
     const configCount = await db.collection('configuration').countDocuments();
-    const metricsCount = await db.collection('dashboard_metrics').countDocuments();
     
-    console.log(`- Templates: ${templateCount} documents`);
-    console.log(`- Configuration: ${configCount} documents`);
-    console.log(`- Dashboard Metrics: ${metricsCount} documents`);
+    console.log(`📊 Final state:`);
+    console.log(`- Collections: ${finalCollections.map(c => c.name).join(', ')}`);
+    console.log(`- Configuration documents: ${configCount}`);
     
     return true;
   } catch (error) {
-    console.error('Database initialization failed:', error);
-    console.error('Error details:', error.message);
+    console.error('❌ Database initialization failed:', error);
     return false;
   } finally {
-    // Close the connection
     if (client) {
       await client.close();
-      console.log('MongoDB connection closed');
+      console.log('🔐 MongoDB connection closed');
     }
   }
 }
 
-// Initialize Analyses Collection
-async function initAnalysesCollection(db, existingCollections) {
+/**
+ * Initialize configuration structure - NO BUSINESS LOGIC
+ * Only creates empty/minimal structures that the UI can populate
+ */
+async function initConfigurationStructure(db, existingCollections) {
   try {
-    if (!existingCollections.includes('analyses')) {
-      console.log('Creating analyses collection...');
-      await db.createCollection('analyses');
+    console.log('\n🔧 Setting up configuration structure...');
+    
+    if (!existingCollections.includes('configuration')) {
+      await db.createCollection('configuration');
+      console.log('📝 Created configuration collection');
+    }
+    
+    // Only create EMPTY structures - no business decisions
+    const structuralConfigs = [
+      { 
+        _id: 'api', 
+        key: '', // Empty - user must configure
+        maxUsage: 100,
+        alertThreshold: 80,
+        createdAt: new Date()
+      },
+      { 
+        _id: 'model', 
+        type: 'gpt-4-turbo',
+        temperature: 0.7,
+        maxTokens: 2500,
+        depth: 'Standard',
+        timeout: 30000,
+        createdAt: new Date()
+      },
+      { 
+        _id: 'industries', 
+        whitelist: [], // EMPTY - user configures through UI
+        blacklist: [], // EMPTY - user configures through UI
+        createdAt: new Date(),
+        note: 'Configure preferred and blacklisted industries through the Configuration UI'
+      },
+      { 
+        _id: 'requirements', 
+        strengths: [], // EMPTY - user configures through UI
+        weaknesses: [], // EMPTY - user configures through UI  
+        unsupported: [], // EMPTY - user configures through UI
+        createdAt: new Date(),
+        note: 'Configure platform capabilities through the Configuration UI'
+      }
+    ];
+    
+    // Only create if they don't exist - don't overwrite user data
+    for (const config of structuralConfigs) {
+      const existing = await db.collection('configuration').findOne({ _id: config._id });
       
-      console.log('Creating indexes for analyses collection...');
-      await db.collection('analyses').createIndexes([
-        { key: { timestamp: -1 }, name: 'timestamp_desc' },
-        { key: { customerName: 1 }, name: 'customer_name' },
-        { key: { industry: 1 }, name: 'industry' },
-        { key: { fitScore: -1 }, name: 'fit_score_desc' },
-        { key: { templateId: 1 }, name: 'template_id' }
-      ]);
-      
-      console.log('Analyses collection created with indexes');
-    } else {
-      console.log('Analyses collection already exists, checking indexes...');
-      
-      // Ensure indexes exist even if collection already exists
-      const indexInfo = await db.collection('analyses').indexInformation();
-      
-      // Check and create missing indexes
-      const requiredIndexes = [
-        { key: { timestamp: -1 }, name: 'timestamp_desc' },
-        { key: { customerName: 1 }, name: 'customer_name' },
-        { key: { industry: 1 }, name: 'industry' },
-        { key: { fitScore: -1 }, name: 'fit_score_desc' },
-        { key: { templateId: 1 }, name: 'template_id' }
-      ];
-      
-      for (const idx of requiredIndexes) {
-        const indexName = idx.name;
-        if (!indexInfo[indexName]) {
-          console.log(`Creating missing index: ${indexName}`);
-          await db.collection('analyses').createIndex(idx.key, { name: indexName });
-        }
+      if (!existing) {
+        await db.collection('configuration').insertOne(config);
+        console.log(`📝 Created empty structure for: ${config._id}`);
+      } else {
+        console.log(`✅ Structure already exists: ${config._id} (preserving user data)`);
       }
     }
+    
+    console.log('✅ Configuration structure setup complete');
+    console.log('ℹ️  Users must configure criteria through the UI');
+    
   } catch (error) {
-    console.error('Error initializing analyses collection:', error);
+    console.error('❌ Error setting up configuration structure:', error);
     throw error;
   }
 }
 
-// Initialize Templates Collection
+async function initAnalysesCollection(db, existingCollections) {
+  try {
+    if (!existingCollections.includes('analyses')) {
+      console.log('📊 Creating analyses collection...');
+      await db.createCollection('analyses');
+      
+      await db.collection('analyses').createIndexes([
+        { key: { timestamp: -1 }, name: 'timestamp_desc' },
+        { key: { customerName: 1 }, name: 'customer_name' },
+        { key: { industry: 1 }, name: 'industry' },
+        { key: { fitScore: -1 }, name: 'fit_score_desc' }
+      ]);
+      
+      console.log('✅ Analyses collection created with indexes');
+    } else {
+      console.log('✅ Analyses collection already exists');
+    }
+  } catch (error) {
+    console.error('❌ Error initializing analyses collection:', error);
+    throw error;
+  }
+}
+
 async function initTemplatesCollection(db, existingCollections) {
   try {
     if (!existingCollections.includes('templates')) {
-      console.log('Creating templates collection...');
+      console.log('📋 Creating templates collection...');
       await db.createCollection('templates');
       
-      console.log('Creating indexes for templates collection...');
       await db.collection('templates').createIndexes([
         { key: { name: 1 }, name: 'template_name', unique: true },
         { key: { industryFocus: 1 }, name: 'industry_focus' }
       ]);
       
-      // Insert default template
+      // Only create a basic default template
       const defaultTemplate = {
         name: 'Standard Analysis Template',
         description: 'Default template for customer analysis',
@@ -139,7 +173,7 @@ async function initTemplatesCollection(db, existingCollections) {
         criteria: {
           scoringFactors: [
             'Industry Fit',
-            'Feature Requirements',
+            'Feature Requirements', 
             'Integration Complexity',
             'User Count',
             'Timeline'
@@ -155,226 +189,26 @@ async function initTemplatesCollection(db, existingCollections) {
       };
       
       await db.collection('templates').insertOne(defaultTemplate);
-      console.log('Templates collection created with default template');
+      console.log('✅ Templates collection created with basic default template');
     } else {
-      console.log('Templates collection already exists, checking indexes and default template...');
-      
-      // Ensure indexes exist
-      const indexInfo = await db.collection('templates').indexInformation();
-      
-      // Check and create missing indexes
-      if (!indexInfo['template_name']) {
-        console.log('Creating missing template_name index...');
-        await db.collection('templates').createIndex({ name: 1 }, { name: 'template_name', unique: true });
-      }
-      
-      if (!indexInfo['industry_focus']) {
-        console.log('Creating missing industry_focus index...');
-        await db.collection('templates').createIndex({ industryFocus: 1 }, { name: 'industry_focus' });
-      }
-      
-      // Check if default template exists
-      const defaultTemplate = await db.collection('templates').findOne({ name: 'Standard Analysis Template' });
-      
-      if (!defaultTemplate) {
-        console.log('Creating missing default template...');
-        await db.collection('templates').insertOne({
-          name: 'Standard Analysis Template',
-          description: 'Default template for customer analysis',
-          industryFocus: 'General',
-          tags: ['standard', 'default'],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          isDefault: true,
-          criteria: {
-            scoringFactors: [
-              'Industry Fit',
-              'Feature Requirements',
-              'Integration Complexity',
-              'User Count',
-              'Timeline'
-            ],
-            weightings: {
-              'Industry Fit': 25,
-              'Feature Requirements': 35,
-              'Integration Complexity': 20,
-              'User Count': 10,
-              'Timeline': 10
-            }
-          }
-        });
-        console.log('Default template created successfully');
-      } else {
-        console.log('Default template already exists');
-      }
+      console.log('✅ Templates collection already exists');
     }
   } catch (error) {
-    console.error('Error initializing templates collection:', error);
+    console.error('❌ Error initializing templates collection:', error);
     throw error;
   }
 }
 
-// Initialize Configuration Collection
-async function initConfigurationCollection(db, existingCollections) {
-  try {
-    if (!existingCollections.includes('configuration')) {
-      console.log('Creating configuration collection...');
-      await db.createCollection('configuration');
-      
-      // Create default configurations that MATCH the UI screenshot
-      const defaultConfigs = [
-        { 
-          _id: 'api', 
-          key: 'sk-sample-api-key',
-          maxUsage: 100,
-          alertThreshold: 80
-        },
-        { 
-          _id: 'model', 
-          type: 'gpt-4-turbo',
-          temperature: 0.7,
-          maxTokens: 2500,
-          depth: 'Standard',
-          timeout: 30000
-        },
-        { 
-          _id: 'industries', 
-          // These should match what's shown in the UI configuration
-          whitelist: [
-            'HVAC',
-            'Plumbing', 
-            'Electrical',
-            'Roofing'
-          ],
-          blacklist: [
-            'Food Service',
-            'Pure SaaS',
-            'Education'
-          ]
-        },
-        { 
-          _id: 'requirements', 
-          // These should match what's shown in the UI configuration
-          strengths: [
-            'Field Technician Management',
-            'Real-time Tracking',
-            'Work Order Management',
-            'Mobile App Capability',
-            'Customer Portal',
-            'Scheduling',
-            'Customizable Checklists'
-          ],
-          weaknesses: [
-            'Complex Manufacturing',
-            'Advanced Project Management', 
-            'Route Optimization'
-          ],
-          unsupported: [
-            'Full ERP',
-            'Complex Accounting',
-            'Hospital Management'
-          ]
-        }
-      ];
-      
-      await db.collection('configuration').insertMany(defaultConfigs);
-      console.log('Configuration collection created with UI-matching defaults');
-    } else {
-      console.log('Configuration collection already exists, checking/updating configurations...');
-      
-      // Check and update existing configurations to match UI
-      const configUpdates = [
-        {
-          _id: 'industries',
-          whitelist: ['HVAC', 'Plumbing', 'Electrical', 'Roofing'],
-          blacklist: ['Food Service', 'Pure SaaS', 'Education'],
-          updatedAt: new Date()
-        },
-        {
-          _id: 'requirements',
-          strengths: [
-            'Field Technician Management',
-            'Real-time Tracking', 
-            'Work Order Management',
-            'Mobile App Capability',
-            'Customer Portal',
-            'Scheduling',
-            'Customizable Checklists'
-          ],
-          weaknesses: [
-            'Complex Manufacturing',
-            'Advanced Project Management',
-            'Route Optimization'  
-          ],
-          unsupported: [
-            'Full ERP',
-            'Complex Accounting',
-            'Hospital Management'
-          ],
-          updatedAt: new Date()
-        }
-      ];
-      
-      for (const config of configUpdates) {
-        const existing = await db.collection('configuration').findOne({ _id: config._id });
-        
-        if (!existing) {
-          console.log(`Creating missing configuration: ${config._id}`);
-          await db.collection('configuration').insertOne(config);
-        } else {
-          // Update to ensure it matches the UI configuration
-          console.log(`Updating configuration to match UI: ${config._id}`);
-          await db.collection('configuration').replaceOne(
-            { _id: config._id },
-            config
-          );
-        }
-      }
-      
-      // Handle other configs (api, model) if missing
-      const otherConfigs = [
-        {
-          _id: 'api',
-          key: 'sk-sample-api-key',
-          maxUsage: 100,
-          alertThreshold: 80
-        },
-        {
-          _id: 'model',
-          type: 'gpt-4-turbo',
-          temperature: 0.7,
-          maxTokens: 2500,
-          depth: 'Standard',
-          timeout: 30000
-        }
-      ];
-      
-      for (const config of otherConfigs) {
-        const existing = await db.collection('configuration').findOne({ _id: config._id });
-        if (!existing) {
-          console.log(`Creating missing configuration: ${config._id}`);
-          await db.collection('configuration').insertOne(config);
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error initializing configuration collection:', error);
-    throw error;
-  }
-}
-
-// Initialize Dashboard Metrics Collection
 async function initDashboardMetricsCollection(db, existingCollections) {
   try {
     if (!existingCollections.includes('dashboard_metrics')) {
-      console.log('Creating dashboard_metrics collection...');
+      console.log('📈 Creating dashboard_metrics collection...');
       await db.createCollection('dashboard_metrics');
       
-      // Create initial metric documents
       const initialMetrics = [
         {
           _id: 'industry_distribution',
-          name: 'industry_distribution',
+          name: 'industry_distribution', 
           timeframe: 'all_time',
           lastUpdated: new Date(),
           data: {}
@@ -382,7 +216,7 @@ async function initDashboardMetricsCollection(db, existingCollections) {
         {
           _id: 'average_fit_score',
           name: 'average_fit_score',
-          timeframe: 'all_time',
+          timeframe: 'all_time', 
           lastUpdated: new Date(),
           data: {
             average: 0,
@@ -393,66 +227,30 @@ async function initDashboardMetricsCollection(db, existingCollections) {
       ];
       
       await db.collection('dashboard_metrics').insertMany(initialMetrics);
-      console.log('Dashboard metrics collection created with initial documents');
+      console.log('✅ Dashboard metrics collection created');
     } else {
-      console.log('Dashboard metrics collection already exists, checking initial metrics...');
-      
-      // Check if required metrics exist
-      const metricIds = ['industry_distribution', 'average_fit_score'];
-      
-      for (const metricId of metricIds) {
-        const metric = await db.collection('dashboard_metrics').findOne({ _id: metricId });
-        
-        if (!metric) {
-          console.log(`Creating missing metric: ${metricId}`);
-          
-          let initialMetric = {};
-          
-          if (metricId === 'industry_distribution') {
-            initialMetric = {
-              _id: 'industry_distribution',
-              name: 'industry_distribution',
-              timeframe: 'all_time',
-              lastUpdated: new Date(),
-              data: {}
-            };
-          } else if (metricId === 'average_fit_score') {
-            initialMetric = {
-              _id: 'average_fit_score',
-              name: 'average_fit_score',
-              timeframe: 'all_time',
-              lastUpdated: new Date(),
-              data: {
-                average: 0,
-                count: 0,
-                sum: 0
-              }
-            };
-          }
-          
-          await db.collection('dashboard_metrics').insertOne(initialMetric);
-          console.log(`Metric '${metricId}' created successfully`);
-        } else {
-          console.log(`Metric '${metricId}' already exists`);
-        }
-      }
+      console.log('✅ Dashboard metrics collection already exists');
     }
   } catch (error) {
-    console.error('Error initializing dashboard_metrics collection:', error);
+    console.error('❌ Error initializing dashboard_metrics collection:', error);
     throw error;
   }
 }
 
 // Run initialization if executed directly
 if (require.main === module) {
-  console.log('Starting database initialization...');
+  console.log('🚀 Starting database structure initialization...');
+  console.log('ℹ️  This only sets up the database structure');
+  console.log('ℹ️  Configure actual criteria through the Configuration UI');
+  
   initDatabase()
     .then((success) => {
       if (success) {
-        console.log('\n✅ Database initialization script completed successfully');
+        console.log('\n✅ Database structure initialization completed successfully');
+        console.log('📝 Next step: Configure your analysis criteria through the UI');
         process.exit(0);
       } else {
-        console.error('\n❌ Database initialization script failed');
+        console.error('\n❌ Database structure initialization failed');
         process.exit(1);
       }
     })
@@ -462,5 +260,4 @@ if (require.main === module) {
     });
 }
 
-// Export for use in other scripts
 module.exports = { initDatabase };
