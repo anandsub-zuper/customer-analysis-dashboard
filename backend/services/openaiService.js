@@ -6,7 +6,7 @@ require('dotenv').config();
 
 /**
  * Service for interacting with OpenAI API with comprehensive RAG analysis
- * Enhanced with score-based recommendations and industry criteria enforcement
+ * Enhanced with score-based recommendations, industry criteria enforcement, and robust error handling
  */
 const openaiService = {
   /**
@@ -70,14 +70,30 @@ const openaiService = {
       while (retries <= maxRetries) {
         try {
           response = await callOpenAI(prompt);
+          
+          // Validate that we got a proper response
+          if (!response || !response.choices || !response.choices[0] || !response.choices[0].message) {
+            throw new Error('OpenAI returned invalid response structure');
+          }
+          
+          console.log('✅ Valid OpenAI response received');
           break;
         } catch (error) {
           console.error(`OpenAI API call attempt ${retries + 1} failed:`, error.message);
+          
+          // Log more details about the error
+          if (error.response) {
+            console.error('Error response status:', error.response.status);
+            console.error('Error response data:', error.response.data);
+          }
+          
           if (retries < maxRetries) {
-            console.log(`Retrying in 2 seconds...`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            const waitTime = (retries + 1) * 2000; // Increasing wait time
+            console.log(`Retrying in ${waitTime/1000} seconds...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
             retries++;
           } else {
+            console.error('❌ All OpenAI API retry attempts failed');
             throw error;
           }
         }
@@ -526,7 +542,29 @@ async function callOpenAI(prompt) {
       }
     );
     
-    const responseLength = response.data.choices[0].message.content.length;
+    // Enhanced response validation
+    if (!response || !response.data) {
+      throw new Error('OpenAI API returned empty response');
+    }
+    
+    console.log('OpenAI API response structure:', {
+      hasData: !!response.data,
+      hasChoices: !!(response.data && response.data.choices),
+      choicesLength: response.data?.choices?.length,
+      hasUsage: !!(response.data && response.data.usage)
+    });
+    
+    if (!response.data.choices || !Array.isArray(response.data.choices) || response.data.choices.length === 0) {
+      console.error('Invalid OpenAI response structure:', JSON.stringify(response.data, null, 2));
+      throw new Error('OpenAI API returned invalid response structure - missing or empty choices array');
+    }
+    
+    if (!response.data.choices[0] || !response.data.choices[0].message) {
+      console.error('Invalid choice structure:', response.data.choices[0]);
+      throw new Error('OpenAI API returned invalid choice structure - missing message');
+    }
+    
+    const responseLength = response.data.choices[0].message.content?.length || 0;
     const tokensUsed = response.data.usage?.total_tokens || 'unknown';
     const outputTokens = response.data.usage?.completion_tokens || 'unknown';
     
@@ -534,7 +572,7 @@ async function callOpenAI(prompt) {
     console.log(`Tokens: ${tokensUsed} total, ${outputTokens} output (limit: ${maxTokens})`);
     
     // Enhanced truncation detection
-    const truncationRisk = detectTruncationRisk(response, maxTokens);
+    const truncationRisk = detectTruncationRisk(response.data, maxTokens);
     if (truncationRisk.isLikelyTruncated) {
       console.log('⚠️  WARNING: Response appears truncated:', truncationRisk.reason);
       console.log('💡 Consider: Breaking into smaller requests or using higher token limit model');
@@ -543,6 +581,14 @@ async function callOpenAI(prompt) {
     return response.data;
   } catch (error) {
     console.error('Error calling OpenAI API:', error.response?.data || error.message);
+    
+    // Enhanced error logging
+    if (error.response) {
+      console.error('HTTP Status:', error.response.status);
+      console.error('Response headers:', error.response.headers);
+      console.error('Response data:', error.response.data);
+    }
+    
     if (error.response?.status === 401) {
       throw new Error('OpenAI API key is invalid. Please check your configuration.');
     } else if (error.response?.status === 429) {
@@ -589,9 +635,9 @@ function getMaxTokensForModel(model) {
 /**
  * Detect if response was likely truncated
  */
-function detectTruncationRisk(response, maxTokens) {
-  const content = response.choices[0].message.content;
-  const usage = response.data?.usage || {};
+function detectTruncationRisk(responseData, maxTokens) {
+  const content = responseData.choices[0].message.content;
+  const usage = responseData.usage || {};
   const outputTokens = usage.completion_tokens || 0;
   
   // Check if we hit the token limit
@@ -643,7 +689,36 @@ function detectTruncationRisk(response, maxTokens) {
  */
 function processOpenAIResponseRobustly(response) {
   try {
+    // Enhanced debugging and validation
+    console.log('=== PROCESSING OPENAI RESPONSE ===');
+    console.log('Response type:', typeof response);
+    console.log('Response keys:', Object.keys(response || {}));
+    
+    // Validate response structure
+    if (!response) {
+      throw new Error('OpenAI response is null or undefined');
+    }
+    
+    if (!response.choices) {
+      console.error('Response structure:', JSON.stringify(response, null, 2));
+      throw new Error('OpenAI response missing choices array');
+    }
+    
+    if (!Array.isArray(response.choices) || response.choices.length === 0) {
+      console.error('Choices array:', response.choices);
+      throw new Error('OpenAI response choices is not a valid array or is empty');
+    }
+    
+    if (!response.choices[0] || !response.choices[0].message) {
+      console.error('First choice:', response.choices[0]);
+      throw new Error('OpenAI response first choice missing message');
+    }
+    
     const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error('OpenAI response message content is empty');
+    }
+    
     console.log('Raw OpenAI response length:', content.length);
     
     // Strategy 1: Try direct parsing (works if response is clean)
@@ -695,10 +770,22 @@ function processOpenAIResponseRobustly(response) {
     
   } catch (e) {
     console.error('Error parsing OpenAI response:', e);
-    console.error('Response content preview:', response.choices[0].message.content.substring(0, 500));
+    console.error('Response structure debug:', {
+      hasResponse: !!response,
+      hasChoices: !!(response && response.choices),
+      choicesLength: response?.choices?.length,
+      choicesType: typeof response?.choices,
+      firstChoice: response?.choices?.[0] ? 'exists' : 'missing'
+    });
+    
+    // More detailed error logging
+    if (response && response.choices && response.choices[0] && response.choices[0].message) {
+      console.error('Content preview:', response.choices[0].message.content?.substring(0, 500));
+    }
     
     // Last resort: create a basic response with extracted info
-    return createFallbackResponse(response.choices[0].message.content);
+    const fallbackContent = response?.choices?.[0]?.message?.content || '';
+    return createFallbackResponse(fallbackContent);
   }
 }
 
@@ -790,6 +877,12 @@ function repairTruncatedJSON(jsonContent, parseError) {
  */
 function createFallbackResponse(content) {
   console.log('Creating fallback response from partial content...');
+  console.log('Available content length:', content?.length || 0);
+  
+  if (!content) {
+    console.log('No content available, creating minimal fallback');
+    return createMinimalFallbackResponse();
+  }
   
   // Try to extract basic info with regex
   const customerNameMatch = content.match(/"customerName":\s*"([^"]+)"/);
@@ -852,6 +945,67 @@ function createFallbackResponse(content) {
     date: new Date().toISOString(),
     parseWarning: 'This analysis was created from a partially parsed OpenAI response. Consider re-running the analysis with a shorter transcript or in multiple parts.',
     _wasTruncated: true
+  };
+}
+
+/**
+ * Create minimal fallback when no content is available at all
+ */
+function createMinimalFallbackResponse() {
+  return {
+    customerName: 'Unknown Customer',
+    industry: 'Not specified',
+    fitScore: 50,
+    userCount: { 
+      total: 0,
+      backOffice: 0,
+      field: 0
+    },
+    summary: { 
+      overview: 'Analysis failed - no usable content retrieved from OpenAI.',
+      keyRequirements: [],
+      mainPainPoints: []
+    },
+    currentState: {
+      summary: 'Unable to determine current state due to analysis failure.',
+      currentSystems: []
+    },
+    services: { types: [], details: '' },
+    requirements: { keyFeatures: [], integrations: [] },
+    timeline: { desiredGoLive: '', urgency: 'Medium' },
+    budget: { mentioned: false, range: '', constraints: [] },
+    strengths: [],
+    challenges: [],
+    recommendations: {
+      fitScoreRationale: {
+        summary: 'Analysis failed - unable to process OpenAI response.',
+        positiveFactors: [],
+        negativeFactors: ['OpenAI response processing failed'],
+        overallAssessment: 'Manual analysis required - automated processing failed.'
+      },
+      salesStrategy: {
+        recommendation: 'CONDITIONAL',
+        approach: 'Manual analysis required',
+        reasoning: 'Automated analysis failed to process OpenAI response',
+        talkingPoints: ['Schedule detailed follow-up call', 'Request structured information'],
+        risks: ['No automated analysis available'],
+        nextSteps: ['Retry analysis', 'Perform manual qualification', 'Check OpenAI API configuration']
+      },
+      implementationApproach: {
+        strategy: 'Manual analysis required to develop implementation strategy',
+        phases: []
+      },
+      pricingGuidance: {
+        recommendedTier: 'Professional',
+        specialConsiderations: 'Manual pricing analysis required',
+        justification: 'Unable to provide automated pricing guidance due to processing failure'
+      }
+    },
+    similarCustomers: [],
+    date: new Date().toISOString(),
+    parseWarning: 'This analysis was created as a complete fallback due to OpenAI response processing failure. Manual analysis is required.',
+    _wasTruncated: true,
+    _processingFailed: true
   };
 }
 
