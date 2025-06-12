@@ -1,3 +1,4 @@
+// backend/services/openaiService.js - Complete Enhanced Version
 const axios = require('axios');
 const historicalDataService = require('./historicalDataService');
 const criteriaService = require('./criteriaService');
@@ -75,7 +76,7 @@ const openaiService = {
       }
       
       // Phase 8: Process the response with enhanced parsing and validation
-      const result = processOpenAIResponse(response);
+      const result = processOpenAIResponseRobustly(response);
       console.log('Successfully processed OpenAI response.');
       console.log('Extracted customer name:', result.customerName);
       console.log('Extracted industry:', result.industry);
@@ -179,10 +180,11 @@ CRITICAL INSTRUCTIONS:
 7. If something wasn't mentioned, leave the array empty rather than adding generic content
 8. ALWAYS include strategic sales guidance in recommendations based on fit score
 9. Score honestly using ONLY the configured criteria - do not assume industries are good fits
+10. ENSURE YOUR JSON IS COMPLETE - if approaching token limits, prioritize completing the structure
 
 ${criteriaData}
 
-${historicalData}
+${historicalData.substring(0, 2000)}...
 
 Analyze this transcript and extract all relevant information:
 
@@ -363,30 +365,43 @@ If an industry is not in the configured preferred list, treat it as neutral/pena
 }
 
 /**
- * Process OpenAI response with enhanced parsing and validation
+ * ROBUST OpenAI response processing with multiple JSON extraction strategies
  */
-function processOpenAIResponse(response) {
+function processOpenAIResponseRobustly(response) {
   try {
     const content = response.choices[0].message.content;
     console.log('Raw OpenAI response length:', content.length);
     
-    // Try to extract JSON from the response
+    // Strategy 1: Try direct parsing (works if response is clean)
     let jsonContent = content.trim();
     
-    // Remove any markdown code blocks if present
+    // Strategy 2: Remove markdown code blocks if present
     const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
     if (codeBlockMatch) {
       jsonContent = codeBlockMatch[1].trim();
+      console.log('Found JSON in code blocks');
     }
     
-    // Try to find JSON object in the response
+    // Strategy 3: Extract JSON object from text
     const jsonMatch = jsonContent.match(/(\{[\s\S]*\})/);
     if (jsonMatch) {
       jsonContent = jsonMatch[1];
+      console.log('Extracted JSON object from response');
     }
     
-    // Parse the JSON
-    const analysisResults = JSON.parse(jsonContent);
+    // Strategy 4: Try to parse and repair if needed
+    let analysisResults;
+    try {
+      analysisResults = JSON.parse(jsonContent);
+      console.log('✅ JSON parsed successfully');
+    } catch (parseError) {
+      console.log('❌ Initial JSON parse failed, attempting repair...');
+      console.log('Parse error:', parseError.message);
+      console.log('JSON tail (last 200 chars):', jsonContent.substring(jsonContent.length - 200));
+      
+      // Try to repair truncated JSON
+      analysisResults = repairTruncatedJSON(jsonContent, parseError);
+    }
     
     // VALIDATE AND CLEAN THE RESPONSE
     const cleanedResults = validateAndCleanResponse(analysisResults);
@@ -408,9 +423,134 @@ function processOpenAIResponse(response) {
     console.error('Error parsing OpenAI response:', e);
     console.error('Response content preview:', response.choices[0].message.content.substring(0, 500));
     
-    // Don't return fallback - throw error with more context
-    throw new Error(`Failed to parse OpenAI response: ${e.message}. This may indicate the AI response was malformed.`);
+    // Last resort: create a basic response with extracted info
+    return createFallbackResponse(response.choices[0].message.content);
   }
+}
+
+/**
+ * Attempt to repair truncated JSON by fixing common issues
+ */
+function repairTruncatedJSON(jsonContent, parseError) {
+  try {
+    console.log('Attempting JSON repair...');
+    
+    let repairedJSON = jsonContent;
+    
+    // Strategy 1: Find the last complete property and truncate there
+    const lastCompleteProperty = repairedJSON.lastIndexOf('",');
+    const lastCompleteNumber = repairedJSON.lastIndexOf('},');
+    const lastCompleteArray = repairedJSON.lastIndexOf('],');
+    const lastCompleteObject = repairedJSON.lastIndexOf('}');
+    
+    const lastComplete = Math.max(lastCompleteProperty, lastCompleteNumber, lastCompleteArray);
+    
+    if (lastComplete > repairedJSON.length - 100) { // Only if truncation is near the end
+      repairedJSON = repairedJSON.substring(0, lastComplete + 1);
+      console.log('Truncated to last complete property at position', lastComplete);
+    }
+    
+    // Strategy 2: Balance braces and brackets
+    const openBraces = (repairedJSON.match(/\{/g) || []).length;
+    const closedBraces = (repairedJSON.match(/\}/g) || []).length;
+    const openBrackets = (repairedJSON.match(/\[/g) || []).length;
+    const closedBrackets = (repairedJSON.match(/\]/g) || []).length;
+    
+    console.log(`Brace balance: ${openBraces} open, ${closedBraces} closed`);
+    console.log(`Bracket balance: ${openBrackets} open, ${closedBrackets} closed`);
+    
+    // Add missing closing brackets first, then braces
+    const missingBrackets = openBrackets - closedBrackets;
+    const missingBraces = openBraces - closedBraces;
+    
+    if (missingBrackets > 0) {
+      repairedJSON += ']'.repeat(missingBrackets);
+      console.log(`Added ${missingBrackets} closing brackets`);
+    }
+    
+    if (missingBraces > 0) {
+      repairedJSON += '}'.repeat(missingBraces);
+      console.log(`Added ${missingBraces} closing braces`);
+    }
+    
+    // Try parsing the repaired JSON
+    const repairedResult = JSON.parse(repairedJSON);
+    console.log('✅ JSON repair successful!');
+    return repairedResult;
+    
+  } catch (repairError) {
+    console.log('❌ JSON repair failed:', repairError.message);
+    throw repairError;
+  }
+}
+
+/**
+ * Create a fallback response when JSON parsing completely fails
+ */
+function createFallbackResponse(content) {
+  console.log('Creating fallback response from partial content...');
+  
+  // Try to extract basic info with regex
+  const customerNameMatch = content.match(/"customerName":\s*"([^"]+)"/);
+  const industryMatch = content.match(/"industry":\s*"([^"]+)"/);
+  const fitScoreMatch = content.match(/"fitScore":\s*(\d+)/);
+  const totalUsersMatch = content.match(/"total":\s*(\d+)/);
+  const fieldUsersMatch = content.match(/"field":\s*(\d+)/);
+  const backOfficeMatch = content.match(/"backOffice":\s*(\d+)/);
+  
+  return {
+    customerName: customerNameMatch ? customerNameMatch[1] : 'Unknown Customer',
+    industry: industryMatch ? industryMatch[1] : 'Not specified',
+    fitScore: fitScoreMatch ? parseInt(fitScoreMatch[1]) : 50,
+    userCount: { 
+      total: totalUsersMatch ? parseInt(totalUsersMatch[1]) : 0,
+      backOffice: backOfficeMatch ? parseInt(backOfficeMatch[1]) : 0,
+      field: fieldUsersMatch ? parseInt(fieldUsersMatch[1]) : 0
+    },
+    summary: { 
+      overview: 'Analysis completed with partial data due to JSON parsing issues.',
+      keyRequirements: [],
+      mainPainPoints: []
+    },
+    currentState: {
+      summary: 'Current state information was partially retrieved due to parsing issues.',
+      currentSystems: []
+    },
+    services: { types: [], details: '' },
+    requirements: { keyFeatures: [], integrations: [] },
+    timeline: { desiredGoLive: '', urgency: 'Medium' },
+    budget: { mentioned: false, range: '', constraints: [] },
+    strengths: [],
+    challenges: [],
+    recommendations: {
+      fitScoreRationale: {
+        summary: 'Analysis completed with limited data due to parsing issues.',
+        positiveFactors: [],
+        negativeFactors: [],
+        overallAssessment: 'Recommend manual review due to parsing issues.'
+      },
+      salesStrategy: {
+        recommendation: 'CONDITIONAL',
+        approach: 'Manual review required due to parsing issues',
+        reasoning: 'OpenAI response was truncated, recommend re-running analysis',
+        talkingPoints: ['Request additional information', 'Schedule follow-up call'],
+        risks: ['Incomplete analysis'],
+        nextSteps: ['Re-run analysis with shorter transcript', 'Manual review of response']
+      },
+      implementationApproach: {
+        strategy: 'Detailed implementation plan requires complete analysis',
+        phases: []
+      },
+      pricingGuidance: {
+        recommendedTier: 'Professional',
+        specialConsiderations: 'Review pricing after complete analysis',
+        justification: 'Unable to determine optimal pricing due to incomplete data'
+      }
+    },
+    similarCustomers: [],
+    date: new Date().toISOString(),
+    parseWarning: 'This analysis was created from a partially parsed OpenAI response. Consider re-running the analysis with a shorter transcript or in multiple parts.'
+  };
 }
 
 /**
@@ -936,12 +1076,14 @@ function generateKeyLearnings(historical) {
     learnings.push('Multiple integrations required');
   }
   
-  // Business model based on field ratio
+  // Business model based on field ratio instead of industry
   const fieldRatio = (historical.userCount?.field || 0) / (historical.userCount?.total || 1);
   if (fieldRatio > 0.7) {
     learnings.push('Field-heavy operation');
   } else if (fieldRatio < 0.3) {
     learnings.push('Office-based operation');
+  } else if (fieldRatio > 0) {
+    learnings.push('Mixed field/office model');
   }
   
   return learnings.length > 0 ? learnings : ['Standard customer profile'];
@@ -995,7 +1137,7 @@ function validateMinimalStructure(result) {
   return result;
 }
 
-// Helper function to call OpenAI API
+// Helper function to call OpenAI API with INCREASED token limits
 async function callOpenAI(prompt) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -1007,6 +1149,9 @@ async function callOpenAI(prompt) {
     
     console.log('Using OpenAI model:', model);
     
+    // INCREASED max_tokens to prevent truncation
+    const maxTokens = model.includes('gpt-4') ? 4000 : 3500; // Increased from 2500/3000
+    
     const response = await axios.post(
       'https://api.openai.com/v1/chat/completions',
       {
@@ -1014,7 +1159,7 @@ async function callOpenAI(prompt) {
         messages: [
           {
             role: 'system',
-            content: 'You are an expert at analyzing business requirements for field service management software. Be accurate and honest in your assessments. Always respond with valid JSON only.'
+            content: 'You are an expert at analyzing business requirements for field service management software. Be accurate and honest in your assessments. CRITICAL: Always respond with complete, valid JSON only. If approaching token limits, prioritize completing the JSON structure over adding extra detail.'
           },
           {
             role: 'user',
@@ -1022,7 +1167,7 @@ async function callOpenAI(prompt) {
           }
         ],
         temperature: 0.3,
-        max_tokens: 3000
+        max_tokens: maxTokens // INCREASED
       },
       {
         headers: {
@@ -1032,6 +1177,16 @@ async function callOpenAI(prompt) {
         timeout: 30000 // 30 second timeout
       }
     );
+    
+    const responseLength = response.data.choices[0].message.content.length;
+    const tokensUsed = response.data.usage?.total_tokens || 'unknown';
+    
+    console.log(`OpenAI response: ${responseLength} characters, ${tokensUsed}/${maxTokens} tokens`);
+    
+    // Warning if we're close to token limit
+    if (typeof tokensUsed === 'number' && tokensUsed > maxTokens * 0.9) {
+      console.log('⚠️  WARNING: Response approaching token limit, possible truncation');
+    }
     
     return response.data;
   } catch (error) {
