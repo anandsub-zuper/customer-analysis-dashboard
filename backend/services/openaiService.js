@@ -1,4 +1,4 @@
-// backend/services/openaiService.js - Complete Enhanced Version
+// backend/services/openaiService.js - Complete Enhanced Version with All Fixes
 const axios = require('axios');
 const historicalDataService = require('./historicalDataService');
 const criteriaService = require('./criteriaService');
@@ -6,6 +6,7 @@ require('dotenv').config();
 
 /**
  * Service for interacting with OpenAI API with comprehensive RAG analysis
+ * Enhanced with score-based recommendations and industry criteria enforcement
  */
 const openaiService = {
   /**
@@ -15,10 +16,16 @@ const openaiService = {
    */
   analyzeTranscript: async (text) => {
     try {
-      console.log('Starting comprehensive transcript analysis with dynamic criteria...');
+      console.log('Starting comprehensive transcript analysis with enhanced criteria enforcement...');
       console.log('Transcript length:', text.length, 'characters');
       
-      // Phase 1: Quick initial analysis to extract basic info
+      // Phase 1: Validate criteria configuration
+      const criteriaValidation = await validateCriteriaConfiguration();
+      if (criteriaValidation.warnings.length > 0) {
+        console.log('⚠️  Criteria configuration warnings:', criteriaValidation.warnings);
+      }
+      
+      // Phase 2: Quick initial analysis to extract basic info
       console.log('Phase 1: Extracting basic information from transcript...');
       const initialAnalysis = await performInitialAnalysis(text);
       console.log('Initial analysis extracted:', {
@@ -27,34 +34,35 @@ const openaiService = {
         userCount: initialAnalysis.userCount
       });
       
-      // Phase 2: Get historical data based on initial analysis
+      // Phase 3: Get historical data based on initial analysis
       console.log('Phase 2: Retrieving relevant historical data...');
       const historicalData = await historicalDataService.getHistoricalData(initialAnalysis);
       console.log(`Retrieved ${historicalData.length} relevant historical customer records.`);
       
-      // Phase 3: Get comprehensive insights from all data
+      // Phase 4: Get comprehensive insights from all data
       console.log('Phase 3: Getting comprehensive market insights...');
       const insights = await historicalDataService.getComprehensiveInsights();
       
-      // Phase 4: Retrieve DYNAMIC configured criteria (no hardcoded defaults)
+      // Phase 5: Retrieve DYNAMIC configured criteria
       console.log('Phase 4: Loading dynamic criteria configuration...');
       const criteria = await criteriaService.getAllCriteria();
       console.log('Loaded criteria:', {
         preferredIndustries: criteria.industries.whitelist,
         blacklistedIndustries: criteria.industries.blacklist,
         platformStrengths: criteria.requirements.strengths.length,
-        platformLimitations: criteria.requirements.weaknesses.length
+        platformLimitations: criteria.requirements.weaknesses.length,
+        unsupportedFeatures: criteria.requirements.unsupported.length
       });
       
-      // Phase 5: Format data for comprehensive analysis
+      // Phase 6: Format data for comprehensive analysis
       const formattedHistoricalData = historicalDataService.formatHistoricalDataForPrompt(historicalData, insights);
       const formattedCriteria = formatCriteriaForPrompt(criteria);
       
-      // Phase 6: Create comprehensive prompt with all context
+      // Phase 7: Create enhanced prompt with explicit scoring rules
       const prompt = createEnhancedPrompt(text, formattedHistoricalData, formattedCriteria);
       
-      // Phase 7: Call OpenAI API for full analysis with retry logic
-      console.log('Phase 7: Sending comprehensive analysis request to OpenAI...');
+      // Phase 8: Call OpenAI API with enhanced error handling and retry logic
+      console.log('Phase 5: Sending comprehensive analysis request to OpenAI...');
       let response;
       let retries = 0;
       const maxRetries = 2;
@@ -75,32 +83,38 @@ const openaiService = {
         }
       }
       
-      // Phase 8: Process the response with enhanced parsing and validation
+      // Phase 9: Process response with enhanced parsing and score-based enforcement
       const result = processOpenAIResponseRobustly(response);
       console.log('Successfully processed OpenAI response.');
       console.log('Extracted customer name:', result.customerName);
       console.log('Extracted industry:', result.industry);
-      console.log('Extracted user count:', result.userCount);
-      console.log('Fit Score from OpenAI:', result.fitScore);
+      console.log('OpenAI fit score:', result.fitScore);
       
-      // Phase 9: Apply DYNAMIC criteria adjustments (no hardcoded criteria)
+      // Phase 10: Apply DYNAMIC criteria adjustments and score-based recommendations
       const adjustedResult = applyComprehensiveCriteriaAdjustments(result, criteria);
       
-      // Phase 10: Enrich with similar customers using prioritized sections
-      const enrichedResult = enrichWithSimilarCustomers(adjustedResult, historicalData);
+      // Phase 11: Enforce score-based recommendations (NEW)
+      const enforcedResult = enforceScoreBasedRecommendations(adjustedResult, criteria);
       
-      // Phase 11: Validate structure and clean any remaining formatting issues
+      // Phase 12: Enrich with similar customers using prioritized sections
+      const enrichedResult = enrichWithSimilarCustomers(enforcedResult, historicalData);
+      
+      // Phase 13: Validate structure and clean any remaining formatting issues
       const validatedResult = validateMinimalStructure(enrichedResult);
       
-      // Phase 12: Log final result for debugging
+      // Phase 14: Log final result for debugging
       console.log('=== FINAL RESULT VALIDATION ===');
       console.log('Customer Name:', validatedResult.customerName);
       console.log('Industry:', validatedResult.industry);
       console.log('Final Fit Score:', validatedResult.fitScore);
       console.log('Score Category:', validatedResult.scoreBreakdown?.category);
+      console.log('Industry Status:', validatedResult.scoreBreakdown?.industryAnalysis);
+      console.log('Sales Recommendation:', validatedResult.recommendations?.salesStrategy?.recommendation);
+      console.log('Score-Based Override:', validatedResult.recommendations?.salesStrategy?.scoreBasedOverride || false);
       console.log('Strengths Count:', validatedResult.strengths?.length || 0);
       console.log('Challenges Count:', validatedResult.challenges?.length || 0);
       console.log('Similar Customers Sections:', validatedResult.similarCustomers?.length || 0);
+      console.log('Was Truncated:', validatedResult._wasTruncated || false);
       
       return validatedResult;
     } catch (error) {
@@ -109,6 +123,53 @@ const openaiService = {
     }
   }
 };
+
+/**
+ * Validate criteria configuration and provide warnings
+ */
+async function validateCriteriaConfiguration() {
+  try {
+    const criteria = await criteriaService.getAllCriteria();
+    
+    const validation = {
+      hasPreferredIndustries: criteria.industries.whitelist.length > 0,
+      hasBlacklistedIndustries: criteria.industries.blacklist.length > 0,
+      hasStrengths: criteria.requirements.strengths.length > 0,
+      hasWeaknesses: criteria.requirements.weaknesses.length > 0,
+      hasUnsupported: criteria.requirements.unsupported.length > 0,
+      warnings: []
+    };
+    
+    // Generate configuration warnings
+    if (!validation.hasPreferredIndustries) {
+      validation.warnings.push('No preferred industries configured - all industries will receive neutral scoring');
+    }
+    
+    if (!validation.hasBlacklistedIndustries) {
+      validation.warnings.push('No blacklisted industries configured - no industries will be automatically declined');
+    }
+    
+    if (!validation.hasStrengths) {
+      validation.warnings.push('No platform strengths configured - cannot provide strength-based scoring bonuses');
+    }
+    
+    if (!validation.hasWeaknesses && !validation.hasUnsupported) {
+      validation.warnings.push('No platform limitations configured - cannot identify potential implementation risks');
+    }
+    
+    return validation;
+  } catch (error) {
+    console.error('Error validating criteria configuration:', error);
+    return {
+      hasPreferredIndustries: false,
+      hasBlacklistedIndustries: false,
+      hasStrengths: false,
+      hasWeaknesses: false,
+      hasUnsupported: false,
+      warnings: ['Failed to load criteria configuration - using default neutral scoring']
+    };
+  }
+}
 
 /**
  * Perform initial analysis to extract basic information
@@ -164,23 +225,116 @@ ${transcriptText}
 }
 
 /**
- * Create enhanced prompt that uses DYNAMIC criteria and prevents JSON leakage
+ * Format criteria for the prompt using DYNAMIC data with enhanced industry emphasis
+ */
+function formatCriteriaForPrompt(criteria) {
+  const industries = criteria.industries || { whitelist: [], blacklist: [] };
+  const requirements = criteria.requirements || { strengths: [], weaknesses: [], unsupported: [] };
+  
+  const hasPreferredIndustries = industries.whitelist.length > 0;
+  const hasBlacklistedIndustries = industries.blacklist.length > 0;
+  
+  return `
+## CRITICAL INDUSTRY CRITERIA AND SCORING RULES
+
+⚠️  INDUSTRY ASSESSMENT IS MANDATORY - DO NOT SKIP ⚠️
+
+${hasPreferredIndustries ? `
+🟢 PREFERRED INDUSTRIES (Base score 50-60, +10 bonus):
+${industries.whitelist.map(ind => `   • ${ind}`).join('\n')}
+
+SCORING: If customer industry matches ANY preferred industry (exact, partial, or related), give +10 bonus and mention this as a STRENGTH.
+` : `
+🟡 NO PREFERRED INDUSTRIES CONFIGURED
+All industries start with neutral scoring (no bonus, -5 penalty for not being preferred)
+`}
+
+${hasBlacklistedIndustries ? `
+🔴 BLACKLISTED INDUSTRIES (Maximum score 25, ALWAYS recommend DECLINE):
+${industries.blacklist.map(ind => `   • ${ind}`).join('\n')}
+
+SCORING: If customer industry matches ANY blacklisted industry, cap score at 25 and ALWAYS recommend DECLINE.
+` : `
+🟡 NO BLACKLISTED INDUSTRIES CONFIGURED
+`}
+
+🟨 OTHER INDUSTRIES: 
+   • Base score 45-50 with -5 penalty for not being in preferred list
+   • MUST explicitly mention "not in preferred industries" in recommendations
+   • Can still be viable if other factors compensate
+
+## MANDATORY INDUSTRY ANALYSIS REQUIREMENTS:
+
+1. **Industry Classification**: Clearly identify customer's industry
+2. **Preference Check**: State whether industry is preferred, blacklisted, or neutral
+3. **Score Impact**: Explain how industry classification affects fit score
+4. **Recommendation Impact**: Industry classification MUST influence PURSUE/CONDITIONAL/DECLINE decision
+
+## SCORING METHODOLOGY:
+- ✅ Industry in preferred list: +10 points, mention as strength
+- ❌ Industry in blacklist: Max score 25, recommend DECLINE
+- ⚠️  Industry not in preferred list: -5 points, mention as concern
+- 🏗️  Field Worker Ratio >70%: +10 points
+- 🏗️  Field Worker Ratio 50-70%: +5 points  
+- ❌ Field Worker Ratio <30%: -15 points (poor fit for field service)
+- ✅ Requirements matching platform strengths: +3 per match (max +10)
+- ⚠️  Requirements conflicting with limitations: -10 points
+- ❌ Requirements that are unsupported: -20 points
+- ✅ Company size 50-200 users: +3 points
+- ❌ Integration complexity >5 systems: -15 points
+
+## PLATFORM CAPABILITIES ANALYSIS:
+
+🟢 PLATFORM STRENGTHS (give bonus when customer needs these): 
+${requirements.strengths.length > 0 ? requirements.strengths.map(str => `   • ${str}`).join('\n') : '   • None configured - use general field service capabilities'}
+
+🟡 PLATFORM LIMITATIONS (give penalty when customer needs these): 
+${requirements.weaknesses.length > 0 ? requirements.weaknesses.map(weak => `   • ${weak}`).join('\n') : '   • None configured'}
+
+🔴 UNSUPPORTED FEATURES (major penalty when customer needs these): 
+${requirements.unsupported.length > 0 ? requirements.unsupported.map(unsup => `   • ${unsup}`).join('\n') : '   • None configured'}
+
+## RECOMMENDATION DECISION TREE:
+
+📊 **Score 0-29**: DECLINE (fundamental misalignment)
+📊 **Score 30-59**: CONDITIONAL (requires careful qualification)
+📊 **Score 60-79**: PURSUE (good fit with standard approach)  
+📊 **Score 80-100**: PURSUE (excellent fit, accelerated approach)
+
+⚠️  **SPECIAL RULE**: If industry is blacklisted, ALWAYS recommend DECLINE regardless of other factors.
+
+🎯 **INDUSTRY MENTION REQUIREMENT**: Your recommendations MUST explicitly address:
+   - Whether industry is preferred, neutral, or blacklisted
+   - How this impacts the fit assessment
+   - Specific implications for implementation success
+
+CRITICAL: Base your industry assessment ONLY on the CONFIGURED criteria above.
+Do NOT make assumptions about what industries are good for field service software.
+`;
+}
+
+/**
+ * Create enhanced prompt with explicit score-to-recommendation mapping
  */
 function createEnhancedPrompt(transcriptText, historicalData, criteriaData) {
   return `
 You are an expert system analyzing a meeting transcript for Zuper, a field service management software company.
 
-CRITICAL INSTRUCTIONS:
-1. Extract EVERY piece of information from the transcript - DO NOT use generic placeholders
-2. Be honest about fit - use the CONFIGURED criteria below, not field service assumptions
-3. Return ONLY valid JSON without any other text
-4. NEVER include raw JSON objects in summary text - format everything as readable text
-5. For currentState, convert any data structures to readable narrative text
-6. ALL content must be SPECIFIC to what was said in the transcript
-7. If something wasn't mentioned, leave the array empty rather than adding generic content
-8. ALWAYS include strategic sales guidance in recommendations based on fit score
-9. Score honestly using ONLY the configured criteria - do not assume industries are good fits
-10. ENSURE YOUR JSON IS COMPLETE - if approaching token limits, prioritize completing the structure
+CRITICAL INSTRUCTIONS FOR RECOMMENDATIONS:
+1. Your fit score MUST align with your recommendation
+2. Scores 0-29: ALWAYS recommend DECLINE
+3. Scores 30-59: ALWAYS recommend CONDITIONAL  
+4. Scores 60-79: RECOMMEND PURSUE (with caveats if industry not preferred)
+5. Scores 80-100: STRONGLY recommend PURSUE
+6. If industry is NOT in preferred list, EXPLICITLY mention this as a concern
+7. If industry is in blacklist, score should be ≤25 and recommendation should be DECLINE
+8. NEVER include raw JSON objects in summary text - format everything as readable text
+9. For currentState, convert any data structures to readable narrative text
+10. ALL content must be SPECIFIC to what was said in the transcript
+11. If something wasn't mentioned, leave the array empty rather than adding generic content
+12. ALWAYS include strategic sales guidance in recommendations based on fit score
+13. Score honestly using ONLY the configured criteria - do not assume industries are good fits
+14. ENSURE YOUR JSON IS COMPLETE - if approaching token limits, prioritize completing the structure
 
 ${criteriaData}
 
@@ -191,6 +345,11 @@ Analyze this transcript and extract all relevant information:
 """
 ${transcriptText}
 """
+
+ENSURE your recommendations section includes:
+1. Explicit mention if industry is outside preferred criteria
+2. Recommendation (PURSUE/CONDITIONAL/DECLINE) that matches your fit score
+3. Clear reasoning that references the configured criteria
 
 Return a JSON object with this EXACT structure (ensure all text fields are readable, NO nested JSON):
 
@@ -290,17 +449,17 @@ Return a JSON object with this EXACT structure (ensure all text fields are reada
   ],
   "recommendations": {
     "fitScoreRationale": {
-      "summary": "Clear explanation of fit score based on CONFIGURED criteria",
+      "summary": "Clear explanation of fit score based on CONFIGURED criteria, explicitly mentioning industry status",
       "positiveFactors": ["What contributes positively based on configured strengths"],
-      "negativeFactors": ["What reduces score based on configured criteria"],
-      "overallAssessment": "1-2 sentences on overall fit"
+      "negativeFactors": ["What reduces score based on configured criteria, including industry if not preferred"],
+      "overallAssessment": "1-2 sentences on overall fit including industry implications"
     },
     "salesStrategy": {
       "recommendation": "PURSUE/CONDITIONAL/DECLINE based on fit score and configured criteria",
-      "approach": "Specific guidance for this customer",
-      "reasoning": "Why this approach based on their specific needs and configured criteria",
+      "approach": "Specific guidance for this customer that accounts for industry status",
+      "reasoning": "Why this approach based on their specific needs, configured criteria, and industry classification",
       "talkingPoints": ["Customer-specific talking points"],
-      "risks": ["Specific risks for this implementation"],
+      "risks": ["Specific risks for this implementation including industry-related risks"],
       "nextSteps": ["Specific next steps for this prospect"]
     },
     "implementationApproach": {
@@ -320,48 +479,163 @@ Return a JSON object with this EXACT structure (ensure all text fields are reada
       "justification": "Why this pricing fits their needs and budget"
     }
   },
-  "fitScore": Calculate honest score using CONFIGURED criteria - NOT field service assumptions
+  "fitScore": Calculate honest score using CONFIGURED criteria and industry rules
 }`;
 }
 
 /**
- * Format criteria for the prompt using DYNAMIC data from configuration
+ * Enhanced OpenAI API call with proper token limits and truncation detection
  */
-function formatCriteriaForPrompt(criteria) {
-  const industries = criteria.industries || { whitelist: [], blacklist: [] };
-  const requirements = criteria.requirements || { strengths: [], weaknesses: [], unsupported: [] };
+async function callOpenAI(prompt) {
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OpenAI API key is not configured.');
+    }
+    
+    const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
+    console.log('Using OpenAI model:', model);
+    
+    // Enhanced token limits based on actual model capabilities
+    const maxTokens = getMaxTokensForModel(model);
+    console.log(`Setting max_tokens to ${maxTokens} for model ${model}`);
+    
+    const response = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert at analyzing business requirements for field service management software. Be accurate and honest in your assessments. CRITICAL: Always respond with complete, valid JSON only. If approaching token limits, prioritize completing the JSON structure over adding extra detail.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: maxTokens
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 45000 // Increased from 30s to 45s
+      }
+    );
+    
+    const responseLength = response.data.choices[0].message.content.length;
+    const tokensUsed = response.data.usage?.total_tokens || 'unknown';
+    const outputTokens = response.data.usage?.completion_tokens || 'unknown';
+    
+    console.log(`OpenAI response: ${responseLength} characters`);
+    console.log(`Tokens: ${tokensUsed} total, ${outputTokens} output (limit: ${maxTokens})`);
+    
+    // Enhanced truncation detection
+    const truncationRisk = detectTruncationRisk(response, maxTokens);
+    if (truncationRisk.isLikelyTruncated) {
+      console.log('⚠️  WARNING: Response appears truncated:', truncationRisk.reason);
+      console.log('💡 Consider: Breaking into smaller requests or using higher token limit model');
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error calling OpenAI API:', error.response?.data || error.message);
+    if (error.response?.status === 401) {
+      throw new Error('OpenAI API key is invalid. Please check your configuration.');
+    } else if (error.response?.status === 429) {
+      throw new Error('OpenAI API rate limit exceeded. Please try again later.');
+    } else if (error.response?.status === 500) {
+      throw new Error('OpenAI service error. Please try again.');
+    }
+    throw new Error(`OpenAI API error: ${error.message}`);
+  }
+}
+
+/**
+ * Get appropriate max tokens based on model capabilities
+ */
+function getMaxTokensForModel(model) {
+  // Based on actual OpenAI model limits as of 2024
+  const modelLimits = {
+    'gpt-4o': 16384,           // Max output for GPT-4o
+    'gpt-4o-mini': 16384,      // Max output for GPT-4o-mini  
+    'gpt-4-turbo': 4096,       // Max output for GPT-4 Turbo
+    'gpt-4': 4096,             // Max output for GPT-4
+    'gpt-3.5-turbo': 4096,     // Max output for GPT-3.5 Turbo
+    'gpt-3.5-turbo-16k': 4096  // Max output (not context)
+  };
   
-  return `
-## DYNAMIC PLATFORM CRITERIA AND SCORING GUIDELINES (CONFIGURED)
+  // Check for exact match first
+  if (modelLimits[model]) {
+    return modelLimits[model];
+  }
+  
+  // Check for partial matches (handles versioned models like gpt-4o-2024-08-06)
+  for (const [modelName, limit] of Object.entries(modelLimits)) {
+    if (model.startsWith(modelName)) {
+      console.log(`Using ${limit} tokens for model ${model} (matched ${modelName})`);
+      return limit;
+    }
+  }
+  
+  // Default fallback
+  console.log(`Unknown model ${model}, using conservative 4096 token limit`);
+  return 4096;
+}
 
-PREFERRED INDUSTRIES (Base score 50-60, +10 bonus): ${industries.whitelist.length > 0 ? industries.whitelist.join(', ') : 'None configured'}
-BLACKLISTED INDUSTRIES (Maximum score 25): ${industries.blacklist.length > 0 ? industries.blacklist.join(', ') : 'None configured'}
-OTHER INDUSTRIES: Base score 45-55, -5 penalty for not being in preferred list
-
-SCORING METHODOLOGY:
-- Industry Match: +10 for preferred, -5 for others, -25+ for blacklisted
-- Field Worker Ratio >70%: +10 points
-- Field Worker Ratio 50-70%: +5 points  
-- Field Worker Ratio <30%: -15 points
-- Requirements matching platform strengths: +3 per match (max +10)
-- Requirements conflicting with limitations: -10 points
-- Requirements that are unsupported: -20 points
-- Company size 50-200 users: +3 points
-- Integration complexity >5 systems: -15 points
-
-PLATFORM STRENGTHS (give bonus when customer needs these): 
-${requirements.strengths.length > 0 ? requirements.strengths.join(', ') : 'None configured'}
-
-PLATFORM LIMITATIONS (give penalty when customer needs these): 
-${requirements.weaknesses.length > 0 ? requirements.weaknesses.join(', ') : 'None configured'}
-
-UNSUPPORTED FEATURES (major penalty when customer needs these): 
-${requirements.unsupported.length > 0 ? requirements.unsupported.join(', ') : 'None configured'}
-
-CRITICAL: Base your industry assessment ONLY on the CONFIGURED criteria above.
-Do NOT make assumptions about what industries are good for field service software.
-If an industry is not in the configured preferred list, treat it as neutral/penalty.
-`;
+/**
+ * Detect if response was likely truncated
+ */
+function detectTruncationRisk(response, maxTokens) {
+  const content = response.choices[0].message.content;
+  const usage = response.data?.usage || {};
+  const outputTokens = usage.completion_tokens || 0;
+  
+  // Check if we hit the token limit
+  if (outputTokens >= maxTokens * 0.95) {
+    return {
+      isLikelyTruncated: true,
+      reason: `Used ${outputTokens}/${maxTokens} output tokens (${Math.round(outputTokens/maxTokens*100)}%)`
+    };
+  }
+  
+  // Check for incomplete JSON
+  const openBraces = (content.match(/\{/g) || []).length;
+  const closeBraces = (content.match(/\}/g) || []).length;
+  if (openBraces > closeBraces) {
+    return {
+      isLikelyTruncated: true,
+      reason: `Unbalanced JSON braces: ${openBraces} open, ${closeBraces} closed`
+    };
+  }
+  
+  // Check for incomplete final sections
+  const hasRecommendations = content.includes('"recommendations"');
+  const hasCompleteRecommendations = content.includes('"salesStrategy"') && content.includes('"implementationApproach"');
+  
+  if (hasRecommendations && !hasCompleteRecommendations) {
+    return {
+      isLikelyTruncated: true,
+      reason: 'Recommendations section appears incomplete'
+    };
+  }
+  
+  // Check for abrupt ending
+  const lastChar = content.trim().slice(-1);
+  if (lastChar !== '}' && lastChar !== ']' && lastChar !== '"') {
+    return {
+      isLikelyTruncated: true,
+      reason: `Response ends abruptly with character: "${lastChar}"`
+    };
+  }
+  
+  return {
+    isLikelyTruncated: false,
+    reason: 'Response appears complete'
+  };
 }
 
 /**
@@ -429,28 +703,50 @@ function processOpenAIResponseRobustly(response) {
 }
 
 /**
- * Attempt to repair truncated JSON by fixing common issues
+ * Enhanced JSON repair with better truncation handling
  */
 function repairTruncatedJSON(jsonContent, parseError) {
   try {
     console.log('Attempting JSON repair...');
-    
     let repairedJSON = jsonContent;
     
-    // Strategy 1: Find the last complete property and truncate there
-    const lastCompleteProperty = repairedJSON.lastIndexOf('",');
-    const lastCompleteNumber = repairedJSON.lastIndexOf('},');
-    const lastCompleteArray = repairedJSON.lastIndexOf('],');
-    const lastCompleteObject = repairedJSON.lastIndexOf('}');
+    // Strategy 1: Find the last complete section and ensure it's properly closed
+    const criticalSections = [
+      '"recommendations"',
+      '"similarCustomers"', 
+      '"challenges"',
+      '"strengths"',
+      '"requirements"'
+    ];
     
-    const lastComplete = Math.max(lastCompleteProperty, lastCompleteNumber, lastCompleteArray);
+    let lastCompleteSection = -1;
+    let lastSectionName = '';
     
-    if (lastComplete > repairedJSON.length - 100) { // Only if truncation is near the end
-      repairedJSON = repairedJSON.substring(0, lastComplete + 1);
-      console.log('Truncated to last complete property at position', lastComplete);
+    for (const section of criticalSections) {
+      const sectionIndex = repairedJSON.lastIndexOf(section);
+      if (sectionIndex > lastCompleteSection) {
+        lastCompleteSection = sectionIndex;
+        lastSectionName = section;
+      }
     }
     
-    // Strategy 2: Balance braces and brackets
+    if (lastCompleteSection > 0) {
+      console.log(`Last complete section found: ${lastSectionName} at position ${lastCompleteSection}`);
+      
+      // Try to find a good truncation point after this section
+      const afterSection = repairedJSON.substring(lastCompleteSection);
+      const nextComma = afterSection.indexOf(',');
+      const nextBrace = afterSection.indexOf('}');
+      
+      if (nextComma > 0 && (nextBrace < 0 || nextComma < nextBrace)) {
+        // Truncate at the comma after the last complete section
+        const truncateAt = lastCompleteSection + nextComma;
+        repairedJSON = repairedJSON.substring(0, truncateAt);
+        console.log(`Truncated at comma after ${lastSectionName}`);
+      }
+    }
+    
+    // Strategy 2: Balance braces and brackets with priority order
     const openBraces = (repairedJSON.match(/\{/g) || []).length;
     const closedBraces = (repairedJSON.match(/\}/g) || []).length;
     const openBrackets = (repairedJSON.match(/\[/g) || []).length;
@@ -476,6 +772,11 @@ function repairTruncatedJSON(jsonContent, parseError) {
     // Try parsing the repaired JSON
     const repairedResult = JSON.parse(repairedJSON);
     console.log('✅ JSON repair successful!');
+    
+    // Mark as truncated for downstream handling
+    repairedResult._wasTruncated = true;
+    repairedResult._truncationPoint = lastSectionName;
+    
     return repairedResult;
     
   } catch (repairError) {
@@ -549,7 +850,8 @@ function createFallbackResponse(content) {
     },
     similarCustomers: [],
     date: new Date().toISOString(),
-    parseWarning: 'This analysis was created from a partially parsed OpenAI response. Consider re-running the analysis with a shorter transcript or in multiple parts.'
+    parseWarning: 'This analysis was created from a partially parsed OpenAI response. Consider re-running the analysis with a shorter transcript or in multiple parts.',
+    _wasTruncated: true
   };
 }
 
@@ -627,7 +929,7 @@ function validateAndCleanResponse(results) {
 }
 
 /**
- * Apply comprehensive criteria adjustments with DYNAMIC criteria (no hardcoded values)
+ * Apply comprehensive criteria adjustments with DYNAMIC criteria and enhanced logging
  */
 function applyComprehensiveCriteriaAdjustments(result, criteria) {
   let adjustedScore = result.fitScore || 50;
@@ -641,64 +943,51 @@ function applyComprehensiveCriteriaAdjustments(result, criteria) {
     sizeAdjustment: 0,
     finalScore: 0,
     category: '',
-    rationale: []
+    rationale: [],
+    industryAnalysis: {} // Enhanced industry analysis
   };
   
   const industryLower = (result.industry || '').toLowerCase().trim();
   
-  // DYNAMIC INDUSTRY MATCHING - use actual configured criteria
-  const isPreferred = criteria.industries.whitelist.some(preferred => {
-    const prefLower = preferred.toLowerCase().trim();
-    
-    // Exact match
-    if (industryLower === prefLower) return true;
-    
-    // Partial match - both ways
-    if (industryLower.includes(prefLower) || prefLower.includes(industryLower)) return true;
-    
-    // Word-based matching for compound industries
-    const indWords = industryLower.split(/[\s\-,&]+/).filter(w => w.length > 2);
-    const prefWords = prefLower.split(/[\s\-,&]+/).filter(w => w.length > 2);
-    
-    return indWords.some(iw => prefWords.some(pw => 
-      iw.includes(pw) || pw.includes(iw) ||
-      (iw.length > 3 && pw.length > 3 && iw.substring(0, 3) === pw.substring(0, 3))
-    ));
-  });
+  // Enhanced industry analysis
+  const industryAnalysis = analyzeIndustryFit(industryLower, criteria.industries);
+  scoreBreakdown.industryAnalysis = industryAnalysis;
   
-  // Check if blacklisted using DYNAMIC criteria
-  const isBlacklisted = criteria.industries.blacklist.some(blacklisted => {
-    const blackLower = blacklisted.toLowerCase().trim();
-    return industryLower.includes(blackLower) || blackLower.includes(industryLower);
-  });
-  
-  console.log('Dynamic criteria analysis:', {
-    industry: result.industry,
-    configuredWhitelist: criteria.industries.whitelist,
-    configuredBlacklist: criteria.industries.blacklist,
-    isPreferred,
-    isBlacklisted
-  });
-  
-  // APPLY INDUSTRY SCORING BASED ON DYNAMIC CRITERIA
-  if (isBlacklisted) {
-    // Blacklisted: Severe penalty
+  // Apply industry scoring with detailed logging
+  if (industryAnalysis.isBlacklisted) {
     adjustedScore = Math.min(adjustedScore, 25);
     scoreBreakdown.industryAdjustment = adjustedScore - result.fitScore;
     scoreBreakdown.category = 'blacklisted';
-    scoreBreakdown.rationale.push(`${result.industry} is in the configured blacklist`);
-  } else if (isPreferred) {
-    // Preferred: Moderate bonus
+    scoreBreakdown.rationale.push(`${result.industry} is in the configured blacklist - fundamental misalignment`);
+  } else if (industryAnalysis.isPreferred) {
     adjustedScore += 10;
     scoreBreakdown.industryAdjustment = 10;
     scoreBreakdown.category = 'preferred';
-    scoreBreakdown.rationale.push(`${result.industry} matches configured preferred industry`);
+    scoreBreakdown.rationale.push(`${result.industry} matches configured preferred industry: ${industryAnalysis.matchedPreference}`);
   } else {
-    // Not in preferred list: Small penalty
     adjustedScore -= 5;
     scoreBreakdown.industryAdjustment = -5;
     scoreBreakdown.category = 'neutral';
-    scoreBreakdown.rationale.push(`${result.industry} is not in configured preferred industries`);
+    scoreBreakdown.rationale.push(`${result.industry} is not in configured preferred industries - neutral fit with penalty`);
+  }
+  
+  // Field worker ratio bonus/penalty
+  const totalUsers = result.userCount?.total || 0;
+  const fieldUsers = result.userCount?.field || 0;
+  const fieldRatio = totalUsers > 0 ? fieldUsers / totalUsers : 0;
+  
+  if (fieldRatio >= 0.7) {
+    adjustedScore += 10;
+    scoreBreakdown.fieldWorkerBonus += 10;
+    scoreBreakdown.rationale.push(`Excellent field worker ratio (${Math.round(fieldRatio * 100)}%)`);
+  } else if (fieldRatio >= 0.5) {
+    adjustedScore += 5;
+    scoreBreakdown.fieldWorkerBonus += 5;
+    scoreBreakdown.rationale.push(`Good field worker ratio (${Math.round(fieldRatio * 100)}%)`);
+  } else if (fieldRatio < 0.3 && totalUsers > 0) {
+    adjustedScore -= 15;
+    scoreBreakdown.fieldWorkerBonus -= 15;
+    scoreBreakdown.rationale.push(`Low field worker ratio (${Math.round(fieldRatio * 100)}%) - poor fit for field service software`);
   }
   
   // REQUIREMENTS COMPATIBILITY CHECK using DYNAMIC criteria
@@ -750,25 +1039,6 @@ function applyComprehensiveCriteriaAdjustments(result, criteria) {
     scoreBreakdown.rationale.push(`Customer requirements align with platform strengths: ${strengthMatches.join(', ')}`);
   }
   
-  // Field worker ratio bonus/penalty
-  const totalUsers = result.userCount?.total || 0;
-  const fieldUsers = result.userCount?.field || 0;
-  const fieldRatio = totalUsers > 0 ? fieldUsers / totalUsers : 0;
-  
-  if (fieldRatio >= 0.7) {
-    adjustedScore += 10;
-    scoreBreakdown.fieldWorkerBonus += 10;
-    scoreBreakdown.rationale.push(`Excellent field worker ratio (${Math.round(fieldRatio * 100)}%)`);
-  } else if (fieldRatio >= 0.5) {
-    adjustedScore += 5;
-    scoreBreakdown.fieldWorkerBonus += 5;
-    scoreBreakdown.rationale.push(`Good field worker ratio (${Math.round(fieldRatio * 100)}%)`);
-  } else if (fieldRatio < 0.3 && totalUsers > 0) {
-    adjustedScore -= 15;
-    scoreBreakdown.fieldWorkerBonus -= 15;
-    scoreBreakdown.rationale.push(`Low field worker ratio (${Math.round(fieldRatio * 100)}%) - poor fit for field service software`);
-  }
-  
   // Size adjustment
   if (totalUsers >= 50 && totalUsers <= 200) {
     adjustedScore += 3;
@@ -795,13 +1065,236 @@ function applyComprehensiveCriteriaAdjustments(result, criteria) {
   // Ensure score stays within bounds
   scoreBreakdown.finalScore = Math.max(0, Math.min(100, Math.round(adjustedScore)));
   
-  console.log('Dynamic score breakdown:', scoreBreakdown);
+  console.log('Enhanced score breakdown:', {
+    ...scoreBreakdown,
+    industryDetails: industryAnalysis
+  });
   
   // Update result
   result.fitScore = scoreBreakdown.finalScore;
   result.scoreBreakdown = scoreBreakdown;
   
   return result;
+}
+
+/**
+ * Detailed industry fit analysis
+ */
+function analyzeIndustryFit(industryLower, industryConfig) {
+  const whitelist = industryConfig.whitelist || [];
+  const blacklist = industryConfig.blacklist || [];
+  
+  // Check blacklist first (exact and partial matches)
+  for (const blacklisted of blacklist) {
+    const blackLower = blacklisted.toLowerCase().trim();
+    if (industryLower.includes(blackLower) || blackLower.includes(industryLower)) {
+      return {
+        isBlacklisted: true,
+        isPreferred: false,
+        matchedBlacklist: blacklisted,
+        confidence: 'high'
+      };
+    }
+  }
+  
+  // Check whitelist (exact, partial, and word-based matching)
+  for (const preferred of whitelist) {
+    const prefLower = preferred.toLowerCase().trim();
+    
+    // Exact match
+    if (industryLower === prefLower) {
+      return {
+        isBlacklisted: false,
+        isPreferred: true,
+        matchedPreference: preferred,
+        confidence: 'exact'
+      };
+    }
+    
+    // Partial match
+    if (industryLower.includes(prefLower) || prefLower.includes(industryLower)) {
+      return {
+        isBlacklisted: false,
+        isPreferred: true,
+        matchedPreference: preferred,
+        confidence: 'partial'
+      };
+    }
+    
+    // Word-based matching
+    const indWords = industryLower.split(/[\s\-,&]+/).filter(w => w.length > 2);
+    const prefWords = prefLower.split(/[\s\-,&]+/).filter(w => w.length > 2);
+    
+    const hasWordMatch = indWords.some(iw => prefWords.some(pw => 
+      iw.includes(pw) || pw.includes(iw) ||
+      (iw.length > 3 && pw.length > 3 && iw.substring(0, 3) === pw.substring(0, 3))
+    ));
+    
+    if (hasWordMatch) {
+      return {
+        isBlacklisted: false,
+        isPreferred: true,
+        matchedPreference: preferred,
+        confidence: 'word-based'
+      };
+    }
+  }
+  
+  // Not in either list
+  return {
+    isBlacklisted: false,
+    isPreferred: false,
+    confidence: 'neutral'
+  };
+}
+
+/**
+ * NEW: Enforce score-based recommendations and override OpenAI when needed
+ */
+function enforceScoreBasedRecommendations(result, criteria) {
+  const fitScore = result.fitScore || 50;
+  const scoreBreakdown = result.scoreBreakdown || {};
+  
+  // Determine correct recommendation based on score
+  const correctRecommendation = determineRecommendationFromScore(fitScore, scoreBreakdown, result.industry);
+  
+  // Update the sales strategy with score-aligned recommendation
+  if (!result.recommendations) result.recommendations = {};
+  if (!result.recommendations.salesStrategy) result.recommendations.salesStrategy = {};
+  
+  const currentRecommendation = result.recommendations.salesStrategy.recommendation;
+  
+  // If OpenAI's recommendation doesn't match score-based logic, override it
+  if (currentRecommendation !== correctRecommendation.decision) {
+    console.log(`⚠️  OpenAI recommended ${currentRecommendation} but score-based logic suggests ${correctRecommendation.decision}. Overriding.`);
+    
+    result.recommendations.salesStrategy = {
+      ...result.recommendations.salesStrategy,
+      recommendation: correctRecommendation.decision,
+      approach: correctRecommendation.approach,
+      reasoning: correctRecommendation.reasoning,
+      scoreBasedOverride: true,
+      originalAIRecommendation: currentRecommendation,
+      industryConsiderations: correctRecommendation.industryConsiderations
+    };
+    
+    // Add score-based context to fit rationale
+    if (!result.recommendations.fitScoreRationale) {
+      result.recommendations.fitScoreRationale = {};
+    }
+    
+    if (!result.recommendations.fitScoreRationale.summary) {
+      result.recommendations.fitScoreRationale.summary = correctRecommendation.rationale;
+    } else {
+      result.recommendations.fitScoreRationale.summary += ` ${correctRecommendation.rationale}`;
+    }
+    
+    // Ensure industry status is mentioned in negative factors if needed
+    if (scoreBreakdown.category === 'neutral' || scoreBreakdown.category === 'blacklisted') {
+      if (!result.recommendations.fitScoreRationale.negativeFactors) {
+        result.recommendations.fitScoreRationale.negativeFactors = [];
+      }
+      
+      if (scoreBreakdown.category === 'blacklisted') {
+        result.recommendations.fitScoreRationale.negativeFactors.unshift(`${result.industry} industry is in configured blacklist`);
+      } else if (scoreBreakdown.category === 'neutral') {
+        result.recommendations.fitScoreRationale.negativeFactors.unshift(`${result.industry} industry not in configured preferred list`);
+      }
+    }
+  } else {
+    console.log(`✅ OpenAI recommendation ${currentRecommendation} aligns with score-based logic.`);
+  }
+  
+  return result;
+}
+
+/**
+ * Determine recommendation based on fit score, breakdown, and industry
+ */
+function determineRecommendationFromScore(fitScore, scoreBreakdown, industry) {
+  const category = scoreBreakdown.category || 'neutral';
+  
+  // BLACKLISTED INDUSTRIES - Always decline
+  if (category === 'blacklisted' || fitScore < 30) {
+    return {
+      decision: 'DECLINE',
+      approach: 'Politely decline and suggest alternative solutions or partners',
+      reasoning: fitScore < 30 
+        ? `Very low fit score (${fitScore}%) indicates fundamental misalignment with platform capabilities`
+        : `${industry} industry is in configured blacklist - poor strategic fit`,
+      rationale: `Score-based analysis: ${fitScore}% fit indicates high risk of implementation failure and customer dissatisfaction.`,
+      industryConsiderations: category === 'blacklisted' 
+        ? `${industry} is specifically blacklisted as incompatible with the platform`
+        : 'Very low fit score overrides other considerations'
+    };
+  }
+  
+  // FAIR FIT - Conditional pursuit
+  if (fitScore >= 30 && fitScore < 60) {
+    const hasHighFieldRatio = scoreBreakdown.fieldWorkerBonus > 0;
+    const hasComplexIntegrations = scoreBreakdown.complexityPenalty < -10;
+    const isNeutralIndustry = category === 'neutral';
+    
+    return {
+      decision: 'CONDITIONAL',
+      approach: hasComplexIntegrations 
+        ? 'Pursue with detailed technical qualification and extended POC period'
+        : 'Pursue with careful expectation setting and risk mitigation plan',
+      reasoning: `Moderate fit score (${fitScore}%) requires additional qualification. ${
+        isNeutralIndustry ? `${industry} industry not in preferred list adds risk. ` : ''
+      }${hasComplexIntegrations ? 'Complex integration requirements add risk. ' : ''}${
+        hasHighFieldRatio ? 'Strong field worker ratio is positive.' : 'Field worker ratio may limit value.'
+      }`,
+      rationale: `Score breakdown indicates moderate fit with specific risk factors that require careful management.`,
+      industryConsiderations: isNeutralIndustry 
+        ? `${industry} is not in the configured preferred industries, requiring extra diligence`
+        : 'Industry status is acceptable but other factors require attention'
+    };
+  }
+  
+  // GOOD FIT - Pursue
+  if (fitScore >= 60 && fitScore < 80) {
+    const isNeutralIndustry = category === 'neutral';
+    
+    return {
+      decision: 'PURSUE',
+      approach: 'Standard sales process with emphasis on demonstrated strengths',
+      reasoning: `Good fit score (${fitScore}%) indicates strong alignment. ${
+        category === 'preferred' ? `${industry} industry is in preferred list. ` : 
+        isNeutralIndustry ? `${industry} industry not in preferred list but other factors compensate. ` : ''
+      }Focus on areas of strength while addressing any identified challenges.`,
+      rationale: `Score indicates good platform alignment with manageable implementation complexity.`,
+      industryConsiderations: category === 'preferred' 
+        ? `${industry} is a preferred industry - excellent strategic fit`
+        : isNeutralIndustry 
+          ? `${industry} is not preferred but strong fundamentals overcome industry concerns`
+          : 'Strong fundamentals support pursuit despite industry considerations'
+    };
+  }
+  
+  // EXCELLENT FIT - Strongly pursue
+  if (fitScore >= 80) {
+    return {
+      decision: 'PURSUE',
+      approach: 'Accelerated sales process - ideal customer profile',
+      reasoning: `Excellent fit score (${fitScore}%) indicates exceptional alignment. ${
+        category === 'preferred' ? `Perfect ${industry} industry match. ` : ''
+      }High probability of successful implementation and strong ROI.`,
+      rationale: `Score indicates exceptional platform alignment - ideal customer profile.`,
+      industryConsiderations: category === 'preferred'
+        ? `${industry} is a preferred industry - perfect strategic alignment`
+        : 'Exceptional fundamentals transcend industry considerations'
+    };
+  }
+  
+  // Default fallback
+  return {
+    decision: 'CONDITIONAL',
+    approach: 'Standard qualification process required',
+    reasoning: `Fit score (${fitScore}%) requires standard sales qualification to assess viability`,
+    rationale: 'Standard qualification process recommended based on mixed scoring factors.',
+    industryConsiderations: 'Industry assessment requires further evaluation'
+  };
 }
 
 /**
@@ -874,37 +1367,6 @@ function enrichWithSimilarCustomers(result, historicalData) {
   if (similarCustomersSections.length === 0) {
     console.log('No similar customers found in historical data');
     result.similarCustomersMessage = 'No closely matching customers found in historical data. This may be a unique use case.';
-  }
-  
-  // Add historical context to recommendations
-  if (result.recommendations && similarCustomersSections.length > 0) {
-    const allSimilarCustomers = similarCustomersSections.flatMap(section => section.customers);
-    const successfulSimilar = allSimilarCustomers.filter(c => 
-      ['Excellent', 'Good'].includes(c.implementation.health)
-    );
-    const struggingSimilar = allSimilarCustomers.filter(c => 
-      ['Poor', 'Average'].includes(c.implementation.health)
-    );
-    
-    if (!result.recommendations.historicalContext) {
-      result.recommendations.historicalContext = {
-        successfulSimilarCount: successfulSimilar.length,
-        strugglingSimilarCount: struggingSimilar.length,
-        insights: []
-      };
-      
-      if (successfulSimilar.length > 0) {
-        result.recommendations.historicalContext.insights.push(
-          `${successfulSimilar.length} similar customers achieved success`
-        );
-      }
-      
-      if (struggingSimilar.length > 0) {
-        result.recommendations.historicalContext.insights.push(
-          `${struggingSimilar.length} similar customers faced challenges - review their experiences`
-        );
-      }
-    }
   }
   
   return result;
@@ -1135,71 +1597,6 @@ function validateMinimalStructure(result) {
   }
   
   return result;
-}
-
-// Helper function to call OpenAI API with INCREASED token limits
-async function callOpenAI(prompt) {
-  try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error('OpenAI API key is not configured.');
-    }
-    
-    const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
-    
-    console.log('Using OpenAI model:', model);
-    
-    // INCREASED max_tokens to prevent truncation
-    const maxTokens = model.includes('gpt-4') ? 4000 : 3500; // Increased from 2500/3000
-    
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert at analyzing business requirements for field service management software. Be accurate and honest in your assessments. CRITICAL: Always respond with complete, valid JSON only. If approaching token limits, prioritize completing the JSON structure over adding extra detail.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.3,
-        max_tokens: maxTokens // INCREASED
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000 // 30 second timeout
-      }
-    );
-    
-    const responseLength = response.data.choices[0].message.content.length;
-    const tokensUsed = response.data.usage?.total_tokens || 'unknown';
-    
-    console.log(`OpenAI response: ${responseLength} characters, ${tokensUsed}/${maxTokens} tokens`);
-    
-    // Warning if we're close to token limit
-    if (typeof tokensUsed === 'number' && tokensUsed > maxTokens * 0.9) {
-      console.log('⚠️  WARNING: Response approaching token limit, possible truncation');
-    }
-    
-    return response.data;
-  } catch (error) {
-    console.error('Error calling OpenAI API:', error.response?.data || error.message);
-    if (error.response?.status === 401) {
-      throw new Error('OpenAI API key is invalid. Please check your configuration.');
-    } else if (error.response?.status === 429) {
-      throw new Error('OpenAI API rate limit exceeded. Please try again later.');
-    } else if (error.response?.status === 500) {
-      throw new Error('OpenAI service error. Please try again.');
-    }
-    throw new Error(`OpenAI API error: ${error.message}`);
-  }
 }
 
 module.exports = openaiService;
