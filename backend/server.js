@@ -6,6 +6,7 @@ const { JWT } = require('google-auth-library');
 const { connect, close, getDb } = require('./services/mongoDbService');
 const configRoutes = require('./routes/configRoutes');
 
+
 // Load environment variables
 dotenv.config();
 
@@ -32,6 +33,7 @@ const sheetsRoutes = require('./routes/sheetsRoutes');
 const docsRoutes = require('./routes/docsRoutes');
 const analysisRoutes = require('./routes/analysisRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const conversationalRoutes = require('./routes/conversationalRoutes');
 
 // Initialize app
 const app = express();
@@ -41,6 +43,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 app.use('/api/config', configRoutes);
+app.use('/api/conversation', conversationalRoutes);
 
 // Connect to MongoDB on startup
 async function initializeServer() {
