@@ -220,85 +220,54 @@ const ChatWidget = ({ analysisResults }) => {
 };
 
 // Simulate AI response - replace with actual API call
-const simulateAIResponse = async (query, analysisResults) => {
-  await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+import { sendQuery } from '../api/conversationalApi';
+
+const handleSendMessage = async () => {
+  if (!input.trim()) return;
   
-  const queryLower = query.toLowerCase();
+  const userMessage = {
+    id: Date.now(),
+    type: 'user',
+    content: input,
+    timestamp: new Date()
+  };
   
-  if (queryLower.includes('fit score') || queryLower.includes('low score')) {
-    return `The fit score of ${analysisResults?.fitScore || 'N/A'}% is based on several factors:
-
-• **Industry Match**: ${analysisResults?.industry || 'Unknown'} industry alignment
-• **Field Worker Ratio**: ${Math.round(((analysisResults?.userCount?.field || 0) / (analysisResults?.userCount?.total || 1)) * 100)}% field workers
-• **Requirements Complexity**: ${analysisResults?.requirements?.integrations?.length || 0} integrations needed
-
-${analysisResults?.fitScore < 40 ? 'The main concerns are likely industry mismatch or complex requirements that may be difficult to support.' : 'This is actually a decent score with good potential for success.'}`;
-  }
+  setMessages(prev => [...prev, userMessage]);
+  setInput('');
+  setIsLoading(true);
   
-  if (queryLower.includes('similar customer') || queryLower.includes('learn from')) {
-    const similarCount = analysisResults?.similarCustomers?.length || 0;
-    if (similarCount > 0) {
-      return `I found ${similarCount} similar customers in our database. Here are key insights:
-
-• Most similar customers had successful implementations
-• Average implementation time: 6-8 weeks
-• Common success factors: Clear requirements, dedicated project team
-• Potential challenges: Integration complexity, change management
-
-Would you like me to dive deeper into any specific similar customer?`;
-    } else {
-      return "No closely similar customers found in our historical data. This could indicate a unique use case that requires extra attention during qualification.";
+  try {
+    const result = await sendQuery(
+      input, 
+      analysisResults?.id, 
+      conversationId
+    );
+    
+    const botMessage = {
+      id: Date.now() + 1,
+      type: 'bot',
+      content: result.response,
+      timestamp: new Date()
+    };
+    
+    setMessages(prev => [...prev, botMessage]);
+    
+    // Update conversation ID if new
+    if (result.conversationId && !conversationId) {
+      setConversationId(result.conversationId);
     }
+    
+  } catch (error) {
+    const errorMessage = {
+      id: Date.now() + 1,
+      type: 'bot',
+      content: "I'm sorry, I encountered an error. Please try again.",
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, errorMessage]);
+  } finally {
+    setIsLoading(false);
   }
-  
-  if (queryLower.includes('email') || queryLower.includes('follow')) {
-    return `Here's a personalized follow-up email draft:
-
-**Subject**: Next Steps for ${analysisResults?.customerName || 'Your Company'}'s Field Service Solution
-
-Hi [Contact Name],
-
-Thank you for sharing details about ${analysisResults?.customerName || 'your company'}'s field service needs. Based on our analysis:
-
-✅ **Strong fit areas**: ${analysisResults?.strengths?.[0]?.title || 'Field worker management'}
-⚠️ **Areas to discuss**: ${analysisResults?.challenges?.[0]?.title || 'Integration requirements'}
-
-I'd love to schedule a 30-minute call to discuss how we can address your specific needs.
-
-Best regards,
-[Your Name]
-
-Would you like me to customize this further?`;
-  }
-  
-  if (queryLower.includes('accelerate') || queryLower.includes('strategies')) {
-    return `To accelerate this high-fit prospect:
-
-🚀 **Immediate Actions**:
-• Schedule demo focused on their top 3 requirements
-• Share case study from similar ${analysisResults?.industry || 'industry'} customer
-• Involve technical team for integration discussion
-
-📈 **Value Proposition**:
-• Emphasize ROI from ${analysisResults?.userCount?.field || 'field'} worker productivity
-• Address their main pain points directly
-• Propose pilot program to reduce risk
-
-⏰ **Timeline Strategy**:
-• Align with their ${analysisResults?.timeline?.desiredGoLive || 'desired timeline'}
-• Create urgency around implementation benefits
-
-Would you like specific talking points for the next call?`;
-  }
-  
-  return `I understand you're asking about "${query}". Based on the analysis for ${analysisResults?.customerName || 'this customer'}, I can provide insights about:
-
-• Customer fit analysis and scoring factors
-• Implementation recommendations and risks
-• Similar customer comparisons and learnings
-• Next steps and sales strategies
-
-What specific aspect would you like me to explain in more detail?`;
 };
 
 export default ChatWidget;
