@@ -5,6 +5,7 @@ import { Download, Upload, Clock, ArrowLeft, AlertCircle } from 'lucide-react';
 import Button from '../components/common/Button';
 import { getAnalysisHistory, getAnalysis } from '../api/analysisApi';
 import ComprehensiveAnalysisDisplay from '../components/ComprehensiveAnalysisDisplay';
+import ChatWidget from '../components/ChatWidget';
 
 const Analysis = () => {
   const location = useLocation();
@@ -142,6 +143,7 @@ const Analysis = () => {
       <div className="container mx-auto px-6 py-6">
         {/* Use the ComprehensiveAnalysisDisplay component */}
         <ComprehensiveAnalysisDisplay analysisResults={analysisResults} />
+        <ChatWidget analysisResults={analysisResults} />
       </div>
     </div>
   );
