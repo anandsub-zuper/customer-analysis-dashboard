@@ -258,14 +258,32 @@ Respond with JSON only:
 
     const analysisData = context.analysisData;
 
-    // FIXED: Much more specific and directive prompt
+    // ENHANCED: Much more comprehensive data access
     const prompt = `
-You are analyzing a SPECIFIC customer's fit score. Give a precise, data-driven answer using their actual analysis results.
+You are analyzing a SPECIFIC customer's situation. Use their ACTUAL data to give precise, factual answers.
 
 CUSTOMER: ${analysisData.customerName}
 INDUSTRY: ${analysisData.industry}
 FIT SCORE: ${analysisData.fitScore}%
 USERS: ${analysisData.userCount?.total || 'Not specified'} total (${analysisData.userCount?.field || 'Not specified'} field workers)
+
+CURRENT STATE & SYSTEMS:
+${JSON.stringify(analysisData.currentState, null, 2)}
+
+CURRENT SYSTEMS SUMMARY: ${analysisData.currentState?.summary || 'Not specified'}
+CURRENT SYSTEMS LIST: ${analysisData.currentState?.currentSystems?.map(sys => `• ${sys.name}: ${sys.description || ''}`).join('\n') || 'Not specified'}
+
+SERVICES THEY PROVIDE:
+${analysisData.services ? JSON.stringify(analysisData.services, null, 2) : 'Not specified'}
+
+REQUIREMENTS & NEEDS:
+${JSON.stringify(analysisData.requirements, null, 2)}
+
+TIMELINE: ${analysisData.timeline?.desiredGoLive || 'Not specified'}
+URGENCY: ${analysisData.timeline?.urgency || 'Not specified'}
+
+BUDGET INFORMATION:
+${JSON.stringify(analysisData.budget, null, 2)}
 
 ACTUAL SCORING BREAKDOWN:
 ${JSON.stringify(analysisData.scoreBreakdown, null, 2)}
@@ -286,16 +304,21 @@ NEGATIVE FACTORS: ${analysisData.recommendations?.fitScoreRationale?.negativeFac
 
 USER QUESTION: "${query}"
 
-CRITICAL: Answer using their SPECIFIC data only. Reference their actual industry, user count, score breakdown, and criteria. Don't give generic explanations about software fit - analyze THIS customer's specific situation and scoring.
+CRITICAL INSTRUCTIONS:
+1. Use ONLY the actual data provided above - never say data is "not available" if it exists
+2. If asked about replacement reasons, look in currentState, challenges, requirements, and services data
+3. If asked about current systems, reference the currentState and currentSystems data specifically
+4. Be specific and factual - quote their actual systems, challenges, and requirements
+5. Reference their actual company name, industry, and specific numbers
+6. If the data truly isn't present, say so clearly, but check ALL relevant fields first
 
-If asked about fit score, explain:
-1. Their specific industry status (preferred/neutral/blacklisted)
-2. How their user count and field worker ratio affected scoring
-3. Which requirements aligned with platform strengths
-4. What specific factors contributed to their score
-5. Reference the actual scoring breakdown numbers
+If asked about fit score, explain using the scoring breakdown.
+If asked about replacement reasons, use currentState, challenges, and requirements data.
+If asked about current systems, reference currentSystems and currentState.
+If asked about timeline, use the timeline data.
+If asked about budget, use the budget data.
 
-Be specific, analytical, and data-driven. Use their actual company details.`;
+Be specific, factual, and data-driven. Use their actual company details and real information.`;
 
     return await this.callOpenAI(prompt);
   }
