@@ -111,17 +111,17 @@ class ConversationalAIService {
   /**
    * Classify user intent using OpenAI
    */
-  async classifyIntent(query, context) {
+   async classifyIntent(query, context) {
     const prompt = `
 Classify this user query into one of these categories:
 
 CATEGORIES:
-- ANALYSIS_QUESTION: Questions about specific analysis results, scores, recommendations
+- ANALYSIS_QUESTION: Questions about specific analysis results, scores, recommendations, fit scores, scoring breakdown, why certain scores, what factors contributed
 - SIMILAR_CUSTOMERS: Questions about similar customers or historical comparisons  
 - NEXT_STEPS: Questions about what to do next, sales strategies, follow-up actions
 - EMAIL_GENERATION: Requests to generate emails, proposals, or communications
 - DATA_LOOKUP: Questions requiring lookup of specific data or customers
-- EXPLANATION: Requests to explain concepts, processes, or methodology
+- EXPLANATION: Requests to explain general concepts, processes, or methodology (NOT about this specific customer)
 - GENERAL: General questions or conversation
 
 CONTEXT:
@@ -130,21 +130,94 @@ ${context.analysisId ?
 
 USER QUERY: "${query}"
 
+CRITICAL CLASSIFICATION RULES:
+- If query asks "why" about a score/fit/result AND user is viewing a specific analysis → ANALYSIS_QUESTION
+- If query asks about "this customer's" anything → ANALYSIS_QUESTION  
+- If query asks about general concepts without referencing specific data → EXPLANATION
+- If query asks "how does X work" in general → EXPLANATION
+- If query asks "why is this score X" or "what factors" → ANALYSIS_QUESTION
+
 Respond with JSON only:
 {
-  "type": "CATEGORY_NAME", 
-  "confidence": 0.8,
-  "entities": ["extracted", "key", "terms"],
-  "requiresAnalysisData": true/false
+  "type": "ANALYSIS_QUESTION", 
+  "confidence": 0.9,
+  "entities": ["fit", "score", "100%"],
+  "requiresAnalysisData": true,
+  "reasoning": "User asking why specific customer has 100% fit score"
 }`;
 
     try {
-      const response = await this.callOpenAI(prompt, { maxTokens: 200 });
-      return JSON.parse(response);
+      const response = await this.callOpenAI(prompt, { maxTokens: 250 });
+      const intent = JSON.parse(response);
+      
+      // LOG THE INTENT CLASSIFICATION FOR DEBUGGING
+      console.log('🎯 Intent Classification Result:', {
+        query: query.substring(0, 50),
+        classifiedAs: intent.type,
+        confidence: intent.confidence,
+        reasoning: intent.reasoning
+      });
+      
+      return intent;
     } catch (error) {
       console.error('Error classifying intent:', error);
-      return { type: 'GENERAL', confidence: 0.5, entities: [], requiresAnalysisData: false };
+      
+      // ENHANCED FALLBACK: If parsing fails, use rules-based classification
+      const fallbackIntent = this.classifyIntentFallback(query, context);
+      console.log('🔄 Using fallback classification:', fallbackIntent);
+      return fallbackIntent;
     }
+  }
+
+  /**
+   * Fallback intent classification using rules
+   */
+  classifyIntentFallback(query, context) {
+    const queryLower = query.toLowerCase();
+    
+    // If user is viewing analysis and asking about scores/fit/results
+    if (context.analysisId && (
+      queryLower.includes('fit') || 
+      queryLower.includes('score') || 
+      queryLower.includes('why') ||
+      queryLower.includes('100%') ||
+      queryLower.includes('factors') ||
+      queryLower.includes('breakdown')
+    )) {
+      return { 
+        type: 'ANALYSIS_QUESTION', 
+        confidence: 0.8, 
+        entities: [], 
+        requiresAnalysisData: true,
+        source: 'fallback-rules'
+      };
+    }
+    
+    // Other fallback rules...
+    if (queryLower.includes('similar customer')) {
+      return { type: 'SIMILAR_CUSTOMERS', confidence: 0.8, entities: [], requiresAnalysisData: true };
+    }
+    
+    if (queryLower.includes('next step') || queryLower.includes('strategy')) {
+      return { type: 'NEXT_STEPS', confidence: 0.8, entities: [], requiresAnalysisData: true };
+    }
+    
+    if (queryLower.includes('email') || queryLower.includes('generate')) {
+      return { type: 'EMAIL_GENERATION', confidence: 0.8, entities: [], requiresAnalysisData: true };
+    }
+    
+    // Default to ANALYSIS_QUESTION if user is viewing analysis
+    if (context.analysisId) {
+      return { 
+        type: 'ANALYSIS_QUESTION', 
+        confidence: 0.7, 
+        entities: [], 
+        requiresAnalysisData: true,
+        source: 'fallback-default'
+      };
+    }
+    
+    return { type: 'GENERAL', confidence: 0.5, entities: [], requiresAnalysisData: false };
   }
 
   /**
