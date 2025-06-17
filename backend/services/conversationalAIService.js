@@ -1,5 +1,4 @@
-// backend/services/conversationalAIService.js
-const openaiService = require('./openaiService');
+const axios = require('axios');  
 const analysisService = require('./analysisService');
 const historicalDataService = require('./historicalDataService');
 const { getDb } = require('./mongoDbService');
@@ -54,6 +53,61 @@ class ConversationalAIService {
   }
 
   /**
+   * Get conversation context
+   */
+  async getContext(conversationId, analysisId) {
+    const context = {
+      conversationId,
+      analysisId,
+      analysisData: null,
+      conversationHistory: []
+    };
+
+    // Get analysis data if analysisId provided
+    if (analysisId) {
+      try {
+        console.log('Retrieving analysis for context:', analysisId);
+        const analysis = await analysisService.getAnalysisById(analysisId);
+        
+        if (analysis) {
+          context.analysisData = analysis;
+          console.log('Retrieved analysis with fields:', Object.keys(analysis));
+          console.log('Strengths count:', analysis.strengths?.length || 0);
+          console.log('Challenges count:', analysis.challenges?.length || 0);
+        }
+      } catch (error) {
+        console.error('Error loading analysis for context:', error);
+      }
+    }
+
+    // Get conversation history if conversationId provided
+    if (conversationId && this.conversationContexts.has(conversationId)) {
+      context.conversationHistory = this.conversationContexts.get(conversationId);
+    }
+
+    return context;
+  }
+
+  /**
+   * Update conversation context
+   */
+  async updateContext(conversationId, update) {
+    if (!conversationId) return;
+
+    if (!this.conversationContexts.has(conversationId)) {
+      this.conversationContexts.set(conversationId, []);
+    }
+
+    const history = this.conversationContexts.get(conversationId);
+    history.push(update);
+
+    // Keep only last 10 exchanges
+    if (history.length > 10) {
+      history.shift();
+    }
+  }
+
+  /**
    * Classify user intent using OpenAI
    */
   async classifyIntent(query, context) {
@@ -70,7 +124,8 @@ CATEGORIES:
 - GENERAL: General questions or conversation
 
 CONTEXT:
-${context.analysisId ? `User is viewing analysis for: ${context.customerName} (${context.industry})` : 'No specific analysis context'}
+${context.analysisId ? 
+  `User is viewing analysis for: ${context.analysisData?.customerName} (${context.analysisData?.industry})` : 'No specific analysis context'}
 
 USER QUERY: "${query}"
 
@@ -237,61 +292,65 @@ Be practical and sales-focused.`;
     const prompt = `
 Generate a professional, personalized ${emailType} email.
 
-CUSTOMER ANALYSIS:
-Customer: ${analysisData.customerName}
+CUSTOMER CONTEXT:
+Name: ${analysisData.customerName}
 Industry: ${analysisData.industry}
+Users: ${analysisData.userCount?.total}
 Fit Score: ${analysisData.fitScore}%
-Key Requirements: ${analysisData.requirements?.keyFeatures?.slice(0, 3).join(', ')}
-Main Challenges: ${analysisData.challenges?.map(c => c.title).slice(0, 2).join(', ')}
+Key Requirements: ${analysisData.requirements?.keyFeatures?.join(', ') || 'Not specified'}
+Main Challenges: ${analysisData.challenges?.map(c => c.title).join(', ') || 'None'}
 Recommendation: ${analysisData.recommendations?.salesStrategy?.recommendation}
-
-SIMILAR CUSTOMERS SUCCESS:
-${analysisData.similarCustomers?.length > 0 ? 
-  `Similar ${analysisData.similarCustomers[0]?.customers?.[0]?.industry} company achieved ${analysisData.similarCustomers[0]?.customers?.[0]?.implementation?.health} results` : 
-  'Standard implementation success stories available'}
 
 USER REQUEST: "${query}"
 
-Generate a professional email that:
-- References their specific industry and needs
-- Highlights relevant value proposition
-- Addresses their main challenges
-- Includes next steps
-- Uses appropriate tone for fit score level
+Generate a professional email with:
+- Appropriate subject line
+- Personalized content based on their specific situation
+- Clear next steps
+- Professional tone
 
-Format as a complete email with subject line.`;
+Format as:
+Subject: [subject line]
+
+[email body]`;
 
     return await this.callOpenAI(prompt);
   }
 
   /**
-   * Handle data lookup queries
+   * Detect email type from query
+   */
+  detectEmailType(query) {
+    const queryLower = query.toLowerCase();
+    if (queryLower.includes('follow-up') || queryLower.includes('follow up')) return 'follow-up';
+    if (queryLower.includes('introduction') || queryLower.includes('intro')) return 'introduction';
+    if (queryLower.includes('proposal')) return 'proposal';
+    if (queryLower.includes('meeting') || queryLower.includes('call')) return 'meeting request';
+    if (queryLower.includes('demo')) return 'demo invitation';
+    return 'follow-up';
+  }
+
+  /**
+   * Handle data lookup requests
    */
   async handleDataLookup(query, context) {
-    // Extract what they're looking for
-    const searchTerms = this.extractSearchTerms(query);
-    
     try {
-      // Search in historical data
-      const historicalData = await historicalDataService.getHistoricalData();
-      const searchResults = this.searchHistoricalData(historicalData, searchTerms);
+      // Extract search terms
+      const searchTerms = this.extractSearchTerms(query);
       
-      if (searchResults.length === 0) {
-        return `I couldn't find any customers matching "${searchTerms.join(', ')}" in our historical data. Try different search terms or ask me to explain our data structure.`;
-      }
-
+      // Search historical data
+      const historicalData = await historicalDataService.getAllHistoricalData();
+      const results = this.searchHistoricalData(historicalData, searchTerms);
+      
       const prompt = `
-Format search results for the user query.
+You are a data lookup assistant. Answer the user's question based on the search results.
 
 USER QUERY: "${query}"
-SEARCH TERMS: ${searchTerms.join(', ')}
 
-FOUND CUSTOMERS:
-${searchResults.slice(0, 5).map(customer => 
-  `• ${customer.customerName} (${customer.industry}) - Fit Score: ${customer.fitScore}%, Users: ${customer.userCount?.total}`
-).join('\n')}
+SEARCH RESULTS:
+${JSON.stringify(results.slice(0, 5), null, 2)}
 
-Provide a helpful summary of the search results and offer to dive deeper into specific customers.
+Provide a helpful summary of the findings. If no relevant results found, suggest alternative search terms.
 Be conversational and suggest follow-up questions.`;
 
       return await this.callOpenAI(prompt);
@@ -299,6 +358,29 @@ Be conversational and suggest follow-up questions.`;
     } catch (error) {
       return "I encountered an error searching our data. Please try rephrasing your question or contact support if the issue persists.";
     }
+  }
+
+  /**
+   * Extract search terms from query
+   */
+  extractSearchTerms(query) {
+    const terms = query.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(term => term.length > 2)
+      .filter(term => !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(term));
+    
+    return [...new Set(terms)]; // Remove duplicates
+  }
+
+  /**
+   * Search historical data
+   */
+  searchHistoricalData(data, searchTerms) {
+    return data.filter(customer => {
+      const searchText = `${customer.customerName} ${customer.industry} ${customer.services?.join(' ')} ${customer.requirements?.keyFeatures?.join(' ')}`.toLowerCase();
+      return searchTerms.some(term => searchText.includes(term));
+    });
   }
 
   /**
@@ -337,100 +419,32 @@ ${context.analysisData ?
 USER QUERY: "${query}"
 
 Provide a helpful response and suggest how you can assist with customer analysis tasks.
-Be friendly and offer specific ways you can help.`;
+Be conversational and suggest follow-up questions.`;
 
     return await this.callOpenAI(prompt);
   }
 
-  /**
-   * Get conversation context
-   */
-  async getContext(conversationId, analysisId) {
-    const context = {
-      conversationId,
-      analysisId,
-      analysisData: null,
-      customerName: null,
-      industry: null,
-      conversationHistory: []
-    };
-
-    // Get analysis data if provided
-    if (analysisId) {
-      try {
-        context.analysisData = await analysisService.getAnalysisById(analysisId);
-        context.customerName = context.analysisData.customerName;
-        context.industry = context.analysisData.industry;
-      } catch (error) {
-        console.error('Error loading analysis for context:', error);
-      }
-    }
-
-    // Get conversation history (simplified for demo)
-    if (conversationId && this.conversationContexts.has(conversationId)) {
-      context.conversationHistory = this.conversationContexts.get(conversationId);
-    }
-
-    return context;
-  }
-
-  /**
-   * Update conversation context
-   */
-  async updateContext(conversationId, interaction) {
-    if (!conversationId) return;
-
-    const history = this.conversationContexts.get(conversationId) || [];
-    history.push(interaction);
-    
-    // Keep only last 10 interactions
-    if (history.length > 10) {
-      history.shift();
-    }
-    
-    this.conversationContexts.set(conversationId, history);
-  }
-
-  /**
-   * Helper methods
-   */
-  detectEmailType(query) {
-    const queryLower = query.toLowerCase();
-    if (queryLower.includes('follow') || queryLower.includes('follow-up')) return 'follow-up';
-    if (queryLower.includes('intro') || queryLower.includes('introduction')) return 'introduction';
-    if (queryLower.includes('proposal')) return 'proposal';
-    if (queryLower.includes('demo')) return 'demo invitation';
-    if (queryLower.includes('thank')) return 'thank you';
-    return 'follow-up';
-  }
-
-  extractSearchTerms(query) {
-    // Simple term extraction - in production, use NLP
-    const terms = query.toLowerCase()
-      .replace(/[^\w\s]/g, ' ')
-      .split(/\s+/)
-      .filter(term => term.length > 2 && !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'].includes(term));
-    
-    return [...new Set(terms)]; // Remove duplicates
-  }
-
-  searchHistoricalData(data, searchTerms) {
-    return data.filter(customer => {
-      const searchText = `${customer.customerName} ${customer.industry} ${customer.services?.join(' ')} ${customer.requirements?.keyFeatures?.join(' ')}`.toLowerCase();
-      return searchTerms.some(term => searchText.includes(term));
-    });
-  }
-
+  // FIXED: Complete callOpenAI method with axios and timeout
   async callOpenAI(prompt, options = {}) {
     try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
+      console.log('🤖 ConversationalAI: Starting OpenAI call...');
+      console.log('Query length:', prompt.length);
+      
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        throw new Error('OpenAI API key is not configured');
+      }
+
+      const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
+      const maxTokens = options.maxTokens || 800;
+
+      console.log('Using model:', model, 'with max tokens:', maxTokens);
+
+      // FIXED: Use axios instead of fetch with proper timeout
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: model,
           messages: [
             {
               role: 'system',
@@ -442,21 +456,48 @@ Be friendly and offer specific ways you can help.`;
             }
           ],
           temperature: 0.7,
-          max_tokens: options.maxTokens || 800
-        })
-      });
+          max_tokens: maxTokens
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 25000 // 25 second timeout for Heroku (under 30s limit)
+        }
+      );
 
-      const data = await response.json();
+      console.log('✅ ConversationalAI: OpenAI call successful');
       
-      if (!data.choices || !data.choices[0]) {
-        throw new Error('Invalid OpenAI response');
+      if (!response.data || !response.data.choices || !response.data.choices[0]) {
+        throw new Error('Invalid OpenAI response structure');
       }
 
-      return data.choices[0].message.content;
+      const result = response.data.choices[0].message.content;
+      console.log('Response length:', result.length, 'characters');
+      
+      return result;
       
     } catch (error) {
-      console.error('Error calling OpenAI for conversation:', error);
-      throw error;
+      console.error('❌ ConversationalAI: OpenAI call failed:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+
+      // Enhanced error handling for different scenarios
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        throw new Error('OpenAI request timed out. Please try again with a shorter message.');
+      } else if (error.response?.status === 401) {
+        throw new Error('OpenAI API key is invalid. Please check configuration.');
+      } else if (error.response?.status === 429) {
+        throw new Error('OpenAI rate limit exceeded. Please wait a moment and try again.');
+      } else if (error.response?.status === 500) {
+        throw new Error('OpenAI service is temporarily unavailable. Please try again.');
+      } else {
+        throw new Error(`OpenAI error: ${error.message}`);
+      }
     }
   }
 }
