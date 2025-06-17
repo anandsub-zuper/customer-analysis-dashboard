@@ -1,4 +1,4 @@
-// Fixed ChatWidget.jsx - This should replace your current ChatWidget component
+ 
 
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, Send, X, Bot, User, Lightbulb, TrendingUp, Users } from 'lucide-react';
