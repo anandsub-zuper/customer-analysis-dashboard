@@ -1,14 +1,25 @@
-// backend/controllers/conversationalController.js
 const conversationalAI = require('../services/conversationalAIService');
 const analysisService = require('../services/analysisService');
 const { v4: uuidv4 } = require('uuid');
 
 /**
- * Process conversational query
+ * Process conversational query with enhanced error handling
  */
 exports.processQuery = async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { query, analysisId, conversationId } = req.body;
+    
+    // Enhanced logging for production debugging
+    console.log('🔍 Conversation Query Debug:', {
+      query: query?.substring(0, 100) + (query?.length > 100 ? '...' : ''),
+      queryLength: query?.length,
+      analysisId,
+      conversationId,
+      timestamp: new Date().toISOString(),
+      requestId: req.headers['x-request-id'] || 'unknown'
+    });
     
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return res.status(400).json({
@@ -20,13 +31,25 @@ exports.processQuery = async (req, res) => {
     // Generate conversation ID if not provided
     const currentConversationId = conversationId || uuidv4();
     
-    console.log(`Processing conversational query: "${query.substring(0, 100)}${query.length > 100 ? '...' : ''}"`);
+    console.log(`🚀 Processing conversational query: "${query.substring(0, 100)}${query.length > 100 ? '...' : ''}"`);
     
-    const result = await conversationalAI.processQuery(query, {
+    // Add timeout handling for the entire process
+    const queryTimeout = 30000; // 30 seconds total timeout
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Query processing timed out')), queryTimeout);
+    });
+    
+    const queryPromise = conversationalAI.processQuery(query, {
       analysisId,
       conversationId: currentConversationId,
-      userId: req.user?.id // If you have user authentication
+      userId: req.user?.id
     });
+    
+    // Race between the query and timeout
+    const result = await Promise.race([queryPromise, timeoutPromise]);
+    
+    const duration = Date.now() - startTime;
+    console.log(`✅ Query processed successfully in ${duration}ms`);
     
     res.json({
       success: result.success,
@@ -34,15 +57,52 @@ exports.processQuery = async (req, res) => {
       intent: result.intent,
       context: result.context,
       conversationId: currentConversationId,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      processingTime: duration
     });
     
   } catch (error) {
-    console.error('Error in processQuery:', error);
+    const duration = Date.now() - startTime;
+    
+    // Enhanced error logging with more context
+    console.error('❌ Conversation Error Details:', {
+      error: error.message,
+      stack: error.stack?.split('\n').slice(0, 3).join('\n'), // First 3 lines of stack
+      query: req.body.query?.substring(0, 100),
+      analysisId: req.body.analysisId,
+      duration: duration,
+      timestamp: new Date().toISOString(),
+      requestHeaders: {
+        userAgent: req.headers['user-agent'],
+        contentType: req.headers['content-type'],
+        origin: req.headers.origin
+      }
+    });
+    
+    // Determine error type and provide appropriate response
+    let errorMessage = 'Error processing conversational query';
+    let errorCode = 'PROCESSING_ERROR';
+    
+    if (error.message.includes('timeout') || error.message.includes('timed out')) {
+      errorMessage = 'The request timed out. Please try a shorter message or try again.';
+      errorCode = 'TIMEOUT_ERROR';
+    } else if (error.message.includes('OpenAI')) {
+      errorMessage = 'AI service is temporarily unavailable. Please try again in a moment.';
+      errorCode = 'AI_SERVICE_ERROR';
+    } else if (error.message.includes('rate limit')) {
+      errorMessage = 'Service is busy. Please wait a moment and try again.';
+      errorCode = 'RATE_LIMIT_ERROR';
+    } else if (error.message.includes('API key')) {
+      errorMessage = 'AI service configuration error. Please contact support.';
+      errorCode = 'CONFIGURATION_ERROR';
+    }
+    
     res.status(500).json({
       success: false,
-      message: 'Error processing conversational query',
-      error: error.message
+      message: errorMessage,
+      errorCode: errorCode,
+      processingTime: duration,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -54,6 +114,8 @@ exports.getSuggestions = async (req, res) => {
   try {
     const { analysisId } = req.params;
     
+    console.log('📋 Getting suggestions for analysis:', analysisId);
+    
     if (!analysisId) {
       return res.status(400).json({
         success: false,
@@ -61,11 +123,18 @@ exports.getSuggestions = async (req, res) => {
       });
     }
     
-    // Get analysis data
-    const analysis = await analysisService.getAnalysisById(analysisId);
+    // Get analysis data with timeout
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Analysis retrieval timed out')), 10000);
+    });
+    
+    const analysisPromise = analysisService.getAnalysisById(analysisId);
+    const analysis = await Promise.race([analysisPromise, timeoutPromise]);
     
     // Generate contextual suggestions
     const suggestions = generateContextualSuggestions(analysis);
+    
+    console.log(`✅ Generated ${suggestions.length} suggestions for analysis ${analysisId}`);
     
     res.json({
       success: true,
@@ -74,21 +143,31 @@ exports.getSuggestions = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error getting suggestions:', error);
+    console.error('❌ Error getting suggestions:', {
+      error: error.message,
+      analysisId: req.params.analysisId
+    });
+    
     res.status(500).json({
       success: false,
       message: 'Error generating suggestions',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 };
 
 /**
- * Generate email based on analysis
+ * Generate email based on analysis with enhanced error handling
  */
 exports.generateEmail = async (req, res) => {
   try {
     const { analysisId, emailType = 'follow-up', customInstructions = '' } = req.body;
+    
+    console.log('📧 Generating email:', {
+      analysisId,
+      emailType,
+      hasCustomInstructions: !!customInstructions
+    });
     
     if (!analysisId) {
       return res.status(400).json({
@@ -97,18 +176,24 @@ exports.generateEmail = async (req, res) => {
       });
     }
     
-    console.log(`Generating ${emailType} email for analysis ${analysisId}`);
-    
     const query = `Generate a ${emailType} email for this prospect. ${customInstructions}`.trim();
     
-    const result = await conversationalAI.processQuery(query, {
+    // Add timeout for email generation
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Email generation timed out')), 25000);
+    });
+    
+    const emailPromise = conversationalAI.processQuery(query, {
       analysisId,
       conversationId: uuidv4()
     });
     
+    const result = await Promise.race([emailPromise, timeoutPromise]);
+    
     if (result.success) {
-      // Parse email from response (subject and body)
       const emailContent = parseEmailFromResponse(result.response);
+      
+      console.log('✅ Email generated successfully');
       
       res.json({
         success: true,
@@ -116,19 +201,25 @@ exports.generateEmail = async (req, res) => {
         rawResponse: result.response
       });
     } else {
-      res.status(500).json({
-        success: false,
-        message: 'Failed to generate email',
-        error: result.error
-      });
+      throw new Error(result.error || 'Failed to generate email');
     }
     
   } catch (error) {
-    console.error('Error generating email:', error);
+    console.error('❌ Email generation error:', {
+      error: error.message,
+      analysisId: req.body.analysisId,
+      emailType: req.body.emailType
+    });
+    
+    let errorMessage = 'Error generating email';
+    if (error.message.includes('timeout')) {
+      errorMessage = 'Email generation timed out. Please try again.';
+    }
+    
     res.status(500).json({
       success: false,
-      message: 'Error generating email',
-      error: error.message
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -147,17 +238,26 @@ exports.generateAgenda = async (req, res) => {
       });
     }
     
-    console.log(`Generating ${meetingType} agenda for analysis ${analysisId}`);
+    console.log(`📅 Generating ${meetingType} agenda for analysis ${analysisId}`);
     
     const query = `Create a ${duration}-minute ${meetingType} meeting agenda based on this customer analysis. Include time allocations and key discussion points.`;
     
-    const result = await conversationalAI.processQuery(query, {
+    // Add timeout for agenda generation
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Agenda generation timed out')), 25000);
+    });
+    
+    const agendaPromise = conversationalAI.processQuery(query, {
       analysisId,
       conversationId: uuidv4()
     });
     
+    const result = await Promise.race([agendaPromise, timeoutPromise]);
+    
     if (result.success) {
       const agenda = parseAgendaFromResponse(result.response);
+      
+      console.log('✅ Agenda generated successfully');
       
       res.json({
         success: true,
@@ -165,19 +265,25 @@ exports.generateAgenda = async (req, res) => {
         rawResponse: result.response
       });
     } else {
-      res.status(500).json({
-        success: false,
-        message: 'Failed to generate agenda',
-        error: result.error
-      });
+      throw new Error(result.error || 'Failed to generate agenda');
     }
     
   } catch (error) {
-    console.error('Error generating agenda:', error);
+    console.error('❌ Agenda generation error:', {
+      error: error.message,
+      analysisId: req.body.analysisId,
+      meetingType: req.body.meetingType
+    });
+    
+    let errorMessage = 'Error generating agenda';
+    if (error.message.includes('timeout')) {
+      errorMessage = 'Agenda generation timed out. Please try again.';
+    }
+    
     res.status(500).json({
       success: false,
-      message: 'Error generating agenda', 
-      error: error.message
+      message: errorMessage, 
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -287,65 +393,58 @@ function parseEmailFromResponse(response) {
   for (const line of lines) {
     if (line.toLowerCase().includes('subject:')) {
       subject = line.replace(/.*subject:\s*/i, '').trim();
-    } else if (line.toLowerCase().includes('hi ') || line.toLowerCase().includes('dear ') || isBody) {
-      isBody = true;
-      body += line + '\n';
+    } else if (isBody || (!subject && !line.toLowerCase().includes('subject:'))) {
+      if (!isBody && line.trim()) {
+        isBody = true;
+      }
+      if (isBody) {
+        body += line + '\n';
+      }
     }
-  }
-  
-  // Fallback parsing if structured format not found
-  if (!subject) {
-    const subjectMatch = response.match(/\*\*Subject\*\*:?\s*(.+)/i);
-    if (subjectMatch) {
-      subject = subjectMatch[1].trim();
-    }
-  }
-  
-  if (!body) {
-    // Use the whole response as body if we can't parse it
-    body = response.replace(/\*\*Subject\*\*:?\s*.+/i, '').trim();
   }
   
   return {
-    subject: subject || `Follow-up: Field Service Solution Discussion`,
-    body: body.trim() || response,
-    timestamp: new Date().toISOString()
+    subject: subject || 'Follow-up regarding your field service management needs',
+    body: body.trim() || response
   };
 }
 
 /**
- * Parse agenda from AI response
+ * Parse agenda content from AI response
  */
 function parseAgendaFromResponse(response) {
-  const lines = response.split('\n').filter(line => line.trim());
+  const lines = response.split('\n');
   const agenda = {
     title: 'Meeting Agenda',
-    duration: '30 minutes',
     items: []
   };
   
   let currentItem = null;
   
   for (const line of lines) {
-    const trimmed = line.trim();
+    const trimmedLine = line.trim();
     
-    // Look for time allocations (e.g., "10 minutes" or "(5 min)")
-    const timeMatch = trimmed.match(/(\d+)\s*(?:min|minutes?)/i);
+    if (!trimmedLine) continue;
     
-    // Look for numbered items or bullet points
-    if (trimmed.match(/^\d+[\.\)]\s*/) || trimmed.match(/^[\-\*]\s*/)) {
+    // Look for time allocations (e.g., "5 min", "10 minutes", etc.)
+    const timeMatch = trimmedLine.match(/(\d+)\s*(min|minute|minutes)/i);
+    
+    if (timeMatch || trimmedLine.match(/^\d+\./)) {
+      // New agenda item
       if (currentItem) {
         agenda.items.push(currentItem);
       }
       
       currentItem = {
-        title: trimmed.replace(/^[\d\.\)\-\*\s]+/, ''),
-        duration: timeMatch ? `${timeMatch[1]} minutes` : '5 minutes',
-        details: []
+        duration: timeMatch ? parseInt(timeMatch[1]) : 5,
+        title: trimmedLine.replace(/^\d+\.\s*/, '').replace(/\(\d+\s*(min|minute|minutes)\)/i, '').trim(),
+        description: ''
       };
-    } else if (currentItem && trimmed && !trimmed.includes('Agenda') && !trimmed.includes('Meeting')) {
-      // Add as detail to current item
-      currentItem.details.push(trimmed);
+    } else if (currentItem && trimmedLine.startsWith('-')) {
+      // Sub-item or description
+      currentItem.description += (currentItem.description ? '\n' : '') + trimmedLine;
+    } else if (trimmedLine.toLowerCase().includes('agenda')) {
+      agenda.title = trimmedLine;
     }
   }
   
@@ -354,33 +453,16 @@ function parseAgendaFromResponse(response) {
     agenda.items.push(currentItem);
   }
   
-  // If no structured items found, create a simple agenda
+  // If no structured agenda found, create a simple one
   if (agenda.items.length === 0) {
     agenda.items = [
       {
-        title: 'Introduction and Agenda Review',
-        duration: '5 minutes',
-        details: ['Welcome and introductions', 'Review meeting objectives']
-      },
-      {
-        title: 'Discovery and Requirements',
-        duration: '15 minutes', 
-        details: ['Discuss current challenges', 'Review specific requirements', 'Understand timeline and priorities']
-      },
-      {
-        title: 'Solution Overview',
-        duration: '8 minutes',
-        details: ['Present relevant capabilities', 'Address specific use cases', 'Highlight key benefits']
-      },
-      {
-        title: 'Next Steps',
-        duration: '2 minutes',
-        details: ['Agree on follow-up actions', 'Schedule next meeting', 'Share relevant resources']
+        duration: 30,
+        title: 'Discussion',
+        description: response
       }
     ];
   }
   
   return agenda;
 }
-
-module.exports = exports;
