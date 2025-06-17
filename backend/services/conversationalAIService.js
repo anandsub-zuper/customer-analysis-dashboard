@@ -1,4 +1,5 @@
-const axios = require('axios');  
+// backend/services/conversationalAIService.js - COMPLETE FILE WITH FIX
+const axios = require('axios');
 const analysisService = require('./analysisService');
 const historicalDataService = require('./historicalDataService');
 const { getDb } = require('./mongoDbService');
@@ -175,38 +176,53 @@ Respond with JSON only:
   }
 
   /**
-   * Handle analysis-specific questions
+   * Handle analysis-specific questions - FIXED VERSION
    */
   async handleAnalysisQuestion(query, context) {
     if (!context.analysisData) {
       return "I need analysis data to answer that question. Please make sure you're viewing a specific customer analysis.";
     }
 
+    const analysisData = context.analysisData;
+
+    // FIXED: Much more specific and directive prompt
     const prompt = `
-You are an AI assistant helping sales teams understand customer analysis results.
+You are analyzing a SPECIFIC customer's fit score. Give a precise, data-driven answer using their actual analysis results.
 
-CUSTOMER ANALYSIS DATA:
-Customer: ${context.analysisData.customerName}
-Industry: ${context.analysisData.industry}
-Fit Score: ${context.analysisData.fitScore}%
-Users: ${context.analysisData.userCount?.total} (${context.analysisData.userCount?.field} field workers)
-Recommendation: ${context.analysisData.recommendations?.salesStrategy?.recommendation}
+CUSTOMER: ${analysisData.customerName}
+INDUSTRY: ${analysisData.industry}
+FIT SCORE: ${analysisData.fitScore}%
+USERS: ${analysisData.userCount?.total || 'Not specified'} total (${analysisData.userCount?.field || 'Not specified'} field workers)
 
-SCORING BREAKDOWN:
-${JSON.stringify(context.analysisData.scoreBreakdown, null, 2)}
+ACTUAL SCORING BREAKDOWN:
+${JSON.stringify(analysisData.scoreBreakdown, null, 2)}
 
-STRENGTHS:
-${context.analysisData.strengths?.map(s => `• ${s.title}: ${s.description}`).join('\n') || 'None listed'}
+ACTUAL STRENGTHS:
+${analysisData.strengths?.map(s => `• ${s.title}: ${s.description}`).join('\n') || 'None listed'}
 
-CHALLENGES:
-${context.analysisData.challenges?.map(c => `• ${c.title}: ${c.description} (${c.severity})`).join('\n') || 'None listed'}
+ACTUAL CHALLENGES:
+${analysisData.challenges?.map(c => `• ${c.title}: ${c.description} (Severity: ${c.severity})`).join('\n') || 'None listed'}
+
+SALES RECOMMENDATION: ${analysisData.recommendations?.salesStrategy?.recommendation || 'Not specified'}
+
+REASONING: ${analysisData.recommendations?.fitScoreRationale?.summary || 'Not specified'}
+
+POSITIVE FACTORS: ${analysisData.recommendations?.fitScoreRationale?.positiveFactors?.join(', ') || 'Not specified'}
+
+NEGATIVE FACTORS: ${analysisData.recommendations?.fitScoreRationale?.negativeFactors?.join(', ') || 'Not specified'}
 
 USER QUESTION: "${query}"
 
-Provide a helpful, specific answer based on the analysis data. Be conversational but informative.
-Focus on actionable insights and explain the reasoning behind scores or recommendations.
+CRITICAL: Answer using their SPECIFIC data only. Reference their actual industry, user count, score breakdown, and criteria. Don't give generic explanations about software fit - analyze THIS customer's specific situation and scoring.
 
-Response format: Conversational explanation (2-3 paragraphs max)`;
+If asked about fit score, explain:
+1. Their specific industry status (preferred/neutral/blacklisted)
+2. How their user count and field worker ratio affected scoring
+3. Which requirements aligned with platform strengths
+4. What specific factors contributed to their score
+5. Reference the actual scoring breakdown numbers
+
+Be specific, analytical, and data-driven. Use their actual company details.`;
 
     return await this.callOpenAI(prompt);
   }
