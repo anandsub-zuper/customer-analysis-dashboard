@@ -1,8 +1,9 @@
- 
+// Updated ChatWidget.jsx - Using SmartFormattedMessage for content-aware formatting
 
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, Send, X, Bot, User, Lightbulb, TrendingUp, Users } from 'lucide-react';
-import { sendQuery } from '../api/conversationalApi'; // MOVED TO TOP - CRITICAL FIX
+import { sendQuery } from '../api/conversationalApi';
+import SmartFormattedMessage from './SmartFormattedMessage'; // Import the smart component
 
 const ChatWidget = ({ analysisResults }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -16,7 +17,7 @@ const ChatWidget = ({ analysisResults }) => {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [conversationId, setConversationId] = useState(null); // ADDED - WAS MISSING
+  const [conversationId, setConversationId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -66,7 +67,6 @@ const ChatWidget = ({ analysisResults }) => {
     return actions;
   };
 
-  // FIXED: Single, correct handleSendMessage function
   const handleSendMessage = async () => {
     if (!input.trim()) return;
     
@@ -88,7 +88,6 @@ const ChatWidget = ({ analysisResults }) => {
         conversationId
       });
 
-      // FIXED: Use real API call instead of simulateAIResponse
       const result = await sendQuery(
         input, 
         analysisResults?.id, 
@@ -147,13 +146,20 @@ const ChatWidget = ({ analysisResults }) => {
         {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>
 
-      {/* Chat Window */}
+      {/* Chat Window - Optimized size for different content types */}
       {isOpen && (
-        <div className="fixed bottom-20 right-6 w-96 h-96 bg-white border border-gray-200 rounded-lg shadow-xl z-50 flex flex-col">
+        <div className="fixed bottom-20 right-6 w-[500px] h-[650px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 flex flex-col">
           {/* Header */}
-          <div className="bg-blue-600 text-white p-4 rounded-t-lg flex items-center">
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-t-lg flex items-center">
             <Bot className="h-5 w-5 mr-2" />
-            <span className="font-medium">AI Assistant</span>
+            <div className="flex-1">
+              <span className="font-medium">AI Assistant</span>
+              <div className="text-xs opacity-90">Smart analysis & recommendations</div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-xs opacity-90">Online</span>
+            </div>
           </div>
 
           {/* Messages */}
@@ -164,34 +170,56 @@ const ChatWidget = ({ analysisResults }) => {
                 className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] p-3 rounded-lg ${
+                  className={`max-w-[90%] rounded-lg ${
                     message.type === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-800'
+                      ? 'bg-blue-600 text-white p-3'
+                      : 'bg-white border border-gray-200 shadow-sm'
                   }`}
                 >
-                  <div className="flex items-start space-x-2">
-                    {message.type === 'bot' && <Bot className="h-4 w-4 mt-0.5 text-blue-600" />}
-                    {message.type === 'user' && <User className="h-4 w-4 mt-0.5" />}
-                    <div className="text-sm">{message.content}</div>
+                  {/* Message Header */}
+                  <div className="flex items-start space-x-2 mb-2">
+                    {message.type === 'bot' && (
+                      <div className="flex-shrink-0">
+                        <Bot className="h-4 w-4 text-blue-600 mt-1" />
+                      </div>
+                    )}
+                    {message.type === 'user' && (
+                      <User className="h-4 w-4 mt-1" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      {/* Use SmartFormattedMessage for intelligent formatting */}
+                      {message.type === 'bot' ? (
+                        <div className="p-3">
+                          <SmartFormattedMessage content={message.content} type={message.type} />
+                        </div>
+                      ) : (
+                        <div className="text-sm">{message.content}</div>
+                      )}
+                    </div>
                   </div>
-                  <div className={`text-xs mt-1 opacity-75`}>
+                  
+                  {/* Timestamp */}
+                  <div className={`text-xs mt-2 ${
+                    message.type === 'user' ? 'text-blue-100' : 'text-gray-500 px-3 pb-2'
+                  }`}>
                     {message.timestamp.toLocaleTimeString()}
                   </div>
                 </div>
               </div>
             ))}
             
+            {/* Enhanced Loading indicator */}
             {isLoading && (
               <div className="flex justify-start">
-                <div className="bg-gray-100 p-3 rounded-lg">
-                  <div className="flex items-center space-x-2">
+                <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                  <div className="flex items-center space-x-3">
                     <Bot className="h-4 w-4 text-blue-600" />
                     <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                     </div>
+                    <span className="text-sm text-gray-600">Analyzing & formatting response...</span>
                   </div>
                 </div>
               </div>
@@ -201,41 +229,45 @@ const ChatWidget = ({ analysisResults }) => {
 
           {/* Quick Actions */}
           {messages.length === 1 && (
-            <div className="p-4 border-t border-gray-200">
-              <div className="text-xs text-gray-600 mb-2">Quick actions:</div>
-              <div className="space-y-2">
+            <div className="p-4 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-blue-50">
+              <div className="text-xs text-gray-600 mb-3 font-medium">Try these smart suggestions:</div>
+              <div className="grid grid-cols-1 gap-2">
                 {getQuickActions().map((action, index) => (
                   <button
                     key={index}
                     onClick={() => handleQuickAction(action.query)}
-                    className="w-full text-left text-xs bg-gray-50 hover:bg-gray-100 p-2 rounded flex items-center space-x-2 transition-colors"
+                    className="w-full text-left text-xs bg-white hover:bg-blue-50 p-3 rounded-md border border-gray-200 flex items-center space-x-2 transition-all hover:border-blue-300 hover:shadow-sm group"
                   >
-                    {action.icon}
-                    <span>{action.text}</span>
+                    <span className="text-blue-600 group-hover:text-blue-700">{action.icon}</span>
+                    <span className="text-gray-700 group-hover:text-gray-900">{action.text}</span>
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Input */}
-          <div className="p-4 border-t border-gray-200">
+          {/* Enhanced Input */}
+          <div className="p-4 border-t border-gray-200 bg-white">
             <div className="flex space-x-2">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ask me anything about this analysis..."
-                className="flex-1 p-2 border border-gray-300 rounded-md resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Ask about analysis, generate emails, get strategies..."
+                className="flex-1 p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm placeholder-gray-500"
                 rows={2}
               />
               <button
                 onClick={handleSendMessage}
                 disabled={!input.trim() || isLoading}
-                className="bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-3 rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center shadow-sm"
               >
                 <Send className="h-4 w-4" />
               </button>
+            </div>
+            <div className="text-xs text-gray-500 mt-2 flex items-center justify-between">
+              <span>Press Enter to send, Shift+Enter for new line</span>
+              <span className="text-blue-600">Smart formatting enabled ✨</span>
             </div>
           </div>
         </div>
