@@ -1,5 +1,8 @@
+// Fixed ChatWidget.jsx - This should replace your current ChatWidget component
+
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, Send, X, Bot, User, Lightbulb, TrendingUp, Users } from 'lucide-react';
+import { sendQuery } from '../api/conversationalApi'; // MOVED TO TOP - CRITICAL FIX
 
 const ChatWidget = ({ analysisResults }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -13,6 +16,7 @@ const ChatWidget = ({ analysisResults }) => {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationId, setConversationId] = useState(null); // ADDED - WAS MISSING
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -62,6 +66,7 @@ const ChatWidget = ({ analysisResults }) => {
     return actions;
   };
 
+  // FIXED: Single, correct handleSendMessage function
   const handleSendMessage = async () => {
     if (!input.trim()) return;
     
@@ -77,18 +82,38 @@ const ChatWidget = ({ analysisResults }) => {
     setIsLoading(true);
     
     try {
-      // In real implementation, this would call your backend
-      const response = await simulateAIResponse(input, analysisResults);
+      console.log('ChatWidget: Making API call...', {
+        query: input,
+        analysisId: analysisResults?.id,
+        conversationId
+      });
+
+      // FIXED: Use real API call instead of simulateAIResponse
+      const result = await sendQuery(
+        input, 
+        analysisResults?.id, 
+        conversationId
+      );
+      
+      console.log('ChatWidget: API response received:', result);
       
       const botMessage = {
         id: Date.now() + 1,
         type: 'bot',
-        content: response,
+        content: result.response,
         timestamp: new Date()
       };
       
       setMessages(prev => [...prev, botMessage]);
+      
+      // Update conversation ID if new
+      if (result.conversationId && !conversationId) {
+        setConversationId(result.conversationId);
+      }
+      
     } catch (error) {
+      console.error('ChatWidget: Error sending message:', error);
+      
       const errorMessage = {
         id: Date.now() + 1,
         type: 'bot',
@@ -217,57 +242,6 @@ const ChatWidget = ({ analysisResults }) => {
       )}
     </>
   );
-};
-
-// Simulate AI response - replace with actual API call
-import { sendQuery } from '../api/conversationalApi';
-
-const handleSendMessage = async () => {
-  if (!input.trim()) return;
-  
-  const userMessage = {
-    id: Date.now(),
-    type: 'user',
-    content: input,
-    timestamp: new Date()
-  };
-  
-  setMessages(prev => [...prev, userMessage]);
-  setInput('');
-  setIsLoading(true);
-  
-  try {
-    const result = await sendQuery(
-      input, 
-      analysisResults?.id, 
-      conversationId
-    );
-    
-    const botMessage = {
-      id: Date.now() + 1,
-      type: 'bot',
-      content: result.response,
-      timestamp: new Date()
-    };
-    
-    setMessages(prev => [...prev, botMessage]);
-    
-    // Update conversation ID if new
-    if (result.conversationId && !conversationId) {
-      setConversationId(result.conversationId);
-    }
-    
-  } catch (error) {
-    const errorMessage = {
-      id: Date.now() + 1,
-      type: 'bot',
-      content: "I'm sorry, I encountered an error. Please try again.",
-      timestamp: new Date()
-    };
-    setMessages(prev => [...prev, errorMessage]);
-  } finally {
-    setIsLoading(false);
-  }
 };
 
 export default ChatWidget;
