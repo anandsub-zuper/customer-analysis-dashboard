@@ -70,17 +70,14 @@ class CompanyNameExtractor {
   looksLikeCompanyName(name) {
     const nameLower = name.toLowerCase();
     
-    // Has business suffix
     if (this.companyIndicators.some(indicator => nameLower.includes(indicator))) {
       return true;
     }
     
-    // Has business keywords
     if (this.businessKeywords.some(keyword => nameLower.includes(keyword))) {
       return true;
     }
     
-    // Contains multiple capitalized words (likely proper nouns)
     const capitalizedWords = name.match(/\b[A-Z][a-z]+/g);
     return capitalizedWords && capitalizedWords.length >= 2;
   }
@@ -101,7 +98,6 @@ class CompanyNameExtractor {
     
     const queryLower = companyName.toLowerCase();
     
-    // Get all similar customers from all sections
     const allSimilarCustomers = [];
     context.analysisData.similarCustomers.forEach(section => {
       if (section.customers && Array.isArray(section.customers)) {
@@ -109,13 +105,12 @@ class CompanyNameExtractor {
       }
     });
     
-    // Look for company name matches
     for (const customer of allSimilarCustomers) {
       const customerNameLower = customer.customerName.toLowerCase();
       const variations = [
         customerNameLower,
         customerNameLower.replace(/\b(inc|llc|corp|ltd|company|co)\b/g, '').trim(),
-        customerNameLower.split(' ')[0] // First word
+        customerNameLower.split(' ')[0]
       ];
       
       for (const variation of variations) {
@@ -143,17 +138,15 @@ class BusinessIntelligenceExtractor {
   }
 
   async extractBusinessIntelligence(customerName, analysisData = null) {
-    const maxTimeout = 12000; // 12 second max
+    const maxTimeout = 12000;
     
     console.log(`🔍 Extracting business intelligence for: ${customerName}`);
     
     try {
-      // Check caches first
       if (this.shouldSkipScraping(customerName)) {
         return this.getCachedResult(customerName);
       }
 
-      // Try multiple data extraction strategies
       const businessData = await this.attemptBusinessDataExtraction(customerName, analysisData, { timeout: maxTimeout });
       
       if (businessData && businessData.hasBusinessData) {
@@ -193,7 +186,6 @@ class BusinessIntelligenceExtractor {
       }
     }
 
-    // Fallback to analysis-based intelligence
     return this.generateBusinessIntelligence(customerName, analysisData);
   }
 
@@ -275,14 +267,12 @@ class BusinessIntelligenceExtractor {
       const metaDescription = $('meta[name="description"]').attr('content') || '';
       const allContent = `${title} ${metaDescription} ${fullText}`.toLowerCase();
 
-      // Business model detection
       const businessModel = this.detectBusinessModel(allContent);
       if (businessModel.confidence > 0.3) {
         businessData.businessModel = businessModel;
         businessData.hasBusinessData = true;
       }
 
-      // Revenue and size indicators
       const revenueData = this.extractRevenueIndicators(allContent);
       if (revenueData.hasIndicators) {
         businessData.revenueIndicators = revenueData;
@@ -366,7 +356,6 @@ class BusinessIntelligenceExtractor {
   }
 
   shouldSkipScraping(customerName) {
-    // Check failure cache (6 hours)
     if (this.failureCache.has(customerName)) {
       const failureTime = this.failureCache.get(customerName);
       if (Date.now() - failureTime < 6 * 60 * 60 * 1000) {
@@ -390,138 +379,100 @@ class BusinessIntelligenceExtractor {
 }
 
 /**
- * ENHANCED: OpenAI Intent Classifier - Context-aware classification
+ * FIXED: OpenAI Intent Classifier with Robust Similar Customer Detection
  */
 class OpenAIIntentClassifier {
   constructor() {
     this.intentCategories = {
       'ANALYSIS_QUESTION': {
         description: 'Questions about the current customer analysis being viewed',
-        examples: [
-          'What is their fit score?',
-          'Did the customer mention timeline?',
-          'Why is the score 85%?',
-          'What are their requirements?',
-          'What challenges do they have?'
-        ],
         requiresAnalysisData: true
       },
       'BUSINESS_MODEL': {
         description: 'Questions about business models (B2B/B2C) for any company',
-        examples: [
-          'What is their business model?',
-          'Are they B2B or B2C?',
-          'What type of customers do they serve?'
-        ],
         requiresAnalysisData: false
       },
       'SIMILAR_CUSTOMERS': {
         description: 'Questions about similar customers or historical comparisons',
-        examples: [
-          'Who are similar customers?',
-          'What can we learn from similar companies?',
-          'How did similar customers implement?'
-        ],
         requiresAnalysisData: true
       },
       'EXTERNAL_COMPANY_RESEARCH': {
         description: 'Research about companies not in the current analysis',
-        examples: [
-          'What is Mr. Chill\'s business model?',
-          'Tell me about ABC Company',
-          'Research XYZ Corporation'
-        ],
         requiresAnalysisData: false
       },
       'NEXT_STEPS': {
         description: 'Questions about sales strategy and next actions',
-        examples: [
-          'What should I do next?',
-          'What\'s the recommended approach?',
-          'How should I follow up?'
-        ],
         requiresAnalysisData: true
       },
       'EMAIL_GENERATION': {
         description: 'Requests to generate emails or communications',
-        examples: [
-          'Generate a follow-up email',
-          'Write a proposal email',
-          'Draft a meeting request'
-        ],
         requiresAnalysisData: true
       },
       'DATA_LOOKUP': {
         description: 'Database searches for customers or historical data',
-        examples: [
-          'Find customers in HVAC industry',
-          'Search for companies with 50+ users',
-          'Lookup customers from 2023'
-        ],
         requiresAnalysisData: false
       },
       'EXPLANATION': {
         description: 'General explanations of concepts or processes',
-        examples: [
-          'How does fit scoring work?',
-          'What is field service management?',
-          'Explain the analysis process'
-        ],
         requiresAnalysisData: false
       },
       'GENERAL': {
         description: 'General conversation or greetings',
-        examples: [
-          'Hello',
-          'How are you?',
-          'Thank you'
-        ],
         requiresAnalysisData: false
       }
     };
   }
 
   async classifyIntent(query, context) {
-    // Quick rule-based checks for obvious cases first
-    const quickCheck = this.quickRuleBasedCheck(query, context);
-    if (quickCheck.confidence > 0.9) {
-      console.log('🚀 Quick classification:', quickCheck.type);
+    // ENHANCED: Robust quick checks for high-confidence cases
+    const quickCheck = this.enhancedQuickRuleBasedCheck(query, context);
+    if (quickCheck.confidence > 0.85) {
+      console.log('🚀 Quick classification:', quickCheck.type, 'confidence:', quickCheck.confidence);
       return quickCheck;
     }
 
-    // Use OpenAI for complex cases
     try {
-      const prompt = this.buildClassificationPrompt(query, context);
+      const prompt = this.buildEnhancedClassificationPrompt(query, context);
       console.log('🤖 Using OpenAI for intent classification...');
       
       const response = await this.callOpenAI(prompt, { maxTokens: 300 });
       const intent = JSON.parse(response);
       
-      // Validate and enhance the response
-      const validatedIntent = this.validateAndEnhanceIntent(intent, query, context);
+      // ENHANCED: Strict validation with automatic correction
+      const validatedIntent = this.strictValidateAndCorrect(intent, query, context);
       
       console.log('✅ OpenAI Intent Classification:', {
         query: query.substring(0, 50),
         intent: validatedIntent.type,
         confidence: validatedIntent.confidence,
-        reasoning: validatedIntent.reasoning
+        reasoning: validatedIntent.reasoning,
+        corrected: validatedIntent.wasCorrected || false
       });
       
       return validatedIntent;
       
     } catch (error) {
       console.error('❌ OpenAI intent classification failed:', error);
-      
-      // Fallback to enhanced rule-based classification
-      console.log('🔄 Falling back to rule-based classification...');
       return this.fallbackIntentClassification(query, context);
     }
   }
 
-  quickRuleBasedCheck(query, context) {
+  enhancedQuickRuleBasedCheck(query, context) {
     const queryLower = query.toLowerCase();
     
-    // High-confidence timeline questions with analysis context
+    // HIGH CONFIDENCE: Similar customers queries
+    if (this.isSimilarCustomersQuery(queryLower)) {
+      return {
+        type: 'SIMILAR_CUSTOMERS',
+        confidence: 0.95,
+        entities: ['similar', 'customers'],
+        requiresAnalysisData: true,
+        source: 'quick-similar-customers',
+        reasoning: 'Query explicitly about similar customers'
+      };
+    }
+
+    // HIGH CONFIDENCE: Timeline questions with analysis context
     if (context.analysisId && this.refersToCurrentCustomer(query) && this.isTimelineQuestion(query)) {
       return {
         type: 'ANALYSIS_QUESTION',
@@ -533,7 +484,7 @@ class OpenAIIntentClassifier {
       };
     }
 
-    // Clear current customer questions
+    // HIGH CONFIDENCE: Clear current customer questions
     if (context.analysisId && this.refersToCurrentCustomer(query)) {
       return {
         type: 'ANALYSIS_QUESTION',
@@ -545,43 +496,64 @@ class OpenAIIntentClassifier {
       };
     }
 
-    return { confidence: 0.5 }; // Not confident enough for quick classification
+    return { confidence: 0.5 };
   }
 
-  buildClassificationPrompt(query, context) {
-    const contextInfo = this.buildContextInfo(context);
-    const categoryDescriptions = this.buildCategoryDescriptions();
+  isSimilarCustomersQuery(queryLower) {
+    const similarCustomerIndicators = [
+      'similar customers', 'similar customer', 'comparable customers',
+      'like them', 'who are similar', 'reference customers',
+      'similar companies', 'customers like', 'historical customers',
+      'past customers', 'other customers', 'relevant customers'
+    ];
     
-    return `You are an expert intent classifier for a field service management software sales assistant.
+    const explainSimilarIndicators = [
+      'explain similar', 'tell me about similar', 'show me similar',
+      'describe similar', 'analyze similar', 'most relevant similar'
+    ];
+    
+    const hasSimilarIndicator = similarCustomerIndicators.some(indicator => 
+      queryLower.includes(indicator)
+    );
+    
+    const hasExplainSimilar = explainSimilarIndicators.some(indicator => 
+      queryLower.includes(indicator)
+    );
+    
+    return hasSimilarIndicator || hasExplainSimilar;
+  }
 
-CONTEXT INFORMATION:
+  buildEnhancedClassificationPrompt(query, context) {
+    const contextInfo = this.buildContextInfo(context);
+    
+    return `You are an expert intent classifier. Classify this query into ONE category with high accuracy.
+
+CONTEXT:
 ${contextInfo}
 
-INTENT CATEGORIES:
-${categoryDescriptions}
-
-CLASSIFICATION RULES:
-1. If user is viewing a customer analysis (analysisId exists) and asks about "the customer", "they", "their" → ANALYSIS_QUESTION
-2. If asking about timeline, requirements, budget, systems of current customer → ANALYSIS_QUESTION  
-3. If mentioning specific external company names → EXTERNAL_COMPANY_RESEARCH
-4. If asking for database searches without current customer context → DATA_LOOKUP
-5. If asking about general concepts/processes → EXPLANATION
+CRITICAL CLASSIFICATION RULES:
+1. If query mentions "similar customers", "similar customer", "comparable", "like them" → SIMILAR_CUSTOMERS
+2. If viewing analysis AND asking about "the customer"/"they"/"their" → ANALYSIS_QUESTION  
+3. If asking about external company names → EXTERNAL_COMPANY_RESEARCH
+4. If asking for database searches → DATA_LOOKUP
+5. If asking about general concepts → EXPLANATION
 
 USER QUERY: "${query}"
 
-CRITICAL DECISION POINTS:
-- Does "customer" refer to the current analysis customer or general customers?
-- Is this about current analysis data or external research?
-- Is this a question about loaded data or requiring new data lookup?
+EXAMPLES FOR ACCURACY:
+- "Explain the most relevant similar customers" → SIMILAR_CUSTOMERS
+- "Who are similar customers to this one?" → SIMILAR_CUSTOMERS
+- "Did the customer mention timeline?" → ANALYSIS_QUESTION (when viewing analysis)
+- "What is Mr. Chill's business model?" → EXTERNAL_COMPANY_RESEARCH
+- "Search for HVAC companies" → DATA_LOOKUP
+- "How does fit scoring work?" → EXPLANATION
 
-Respond with JSON only:
+RESPOND WITH VALID JSON ONLY:
 {
-  "type": "ANALYSIS_QUESTION",
+  "type": "SIMILAR_CUSTOMERS",
   "confidence": 0.95,
-  "entities": ["timeline", "implementation"],
-  "requiresAnalysisData": true,
-  "reasoning": "User asking about current customer's timeline while viewing analysis",
-  "contextClues": ["did the customer", "viewing analysis", "specific data request"]
+  "entities": ["similar", "customers"],
+  "reasoning": "User asking about similar customers analysis"
 }`;
   }
 
@@ -595,87 +567,84 @@ Respond with JSON only:
 - Analysis ID: ${context.analysisId}
 - Has Timeline Data: ${!!context.analysisData.timeline}
 - Has Requirements: ${!!context.analysisData.requirements}
-- Has Budget Info: ${!!context.analysisData.budget}
 
 This means questions about "the customer", "they", "their" refer to ${context.analysisData.customerName}.`;
     } else {
       contextInfo += `NO CURRENT ANALYSIS CONTEXT:
 - User is not viewing a specific customer analysis
-- Questions about "customers" likely refer to general database searches
-- No loaded customer data available`;
-    }
-    
-    if (context.conversationHistory && context.conversationHistory.length > 0) {
-      const recentQueries = context.conversationHistory.slice(-3).map(h => h.userQuery);
-      contextInfo += `\n\nRECENT CONVERSATION:
-${recentQueries.map(q => `- "${q}"`).join('\n')}`;
+- Questions about "customers" likely refer to general database searches`;
     }
     
     return contextInfo;
   }
 
-  buildCategoryDescriptions() {
-    return Object.entries(this.intentCategories)
-      .map(([type, info]) => {
-        return `${type}: ${info.description}
-Examples: ${info.examples.slice(0, 3).join(', ')}
-Requires Analysis Data: ${info.requiresAnalysisData}`;
-      })
-      .join('\n\n');
-  }
+  strictValidateAndCorrect(intent, query, context) {
+    const originalIntent = { ...intent };
+    let wasCorrected = false;
+    const corrections = [];
 
-  validateAndEnhanceIntent(intent, query, context) {
-    // Ensure required fields exist
-    if (!intent.type || !this.intentCategories[intent.type]) {
-      console.warn('Invalid intent type, using fallback');
-      return this.fallbackIntentClassification(query, context);
+    // CORRECTION 1: Similar customers query misclassified
+    if (this.isSimilarCustomersQuery(query.toLowerCase()) && intent.type !== 'SIMILAR_CUSTOMERS') {
+      corrections.push({
+        rule: 'similar_customers_override',
+        original: intent.type,
+        corrected: 'SIMILAR_CUSTOMERS',
+        reason: 'Query explicitly mentions similar customers'
+      });
+      intent.type = 'SIMILAR_CUSTOMERS';
+      intent.confidence = 0.95;
+      intent.reasoning = 'Corrected: Query about similar customers';
+      wasCorrected = true;
     }
-    
-    // Set default values
+
+    // CORRECTION 2: Timeline question with wrong context
+    if (intent.reasoning && intent.reasoning.includes('timeline') && 
+        !this.isTimelineQuestion(query)) {
+      corrections.push({
+        rule: 'invalid_timeline_reasoning',
+        reason: 'Reasoning mentions timeline but query is not about timeline'
+      });
+      
+      if (this.isSimilarCustomersQuery(query.toLowerCase())) {
+        intent.type = 'SIMILAR_CUSTOMERS';
+        intent.reasoning = 'Corrected: Query about similar customers, not timeline';
+        wasCorrected = true;
+      }
+    }
+
+    // CORRECTION 3: Current customer override
+    if (context.analysisId && this.refersToCurrentCustomer(query) && 
+        intent.type !== 'ANALYSIS_QUESTION' && !this.isSimilarCustomersQuery(query.toLowerCase())) {
+      corrections.push({
+        rule: 'current_customer_override',
+        original: intent.type,
+        corrected: 'ANALYSIS_QUESTION'
+      });
+      intent.type = 'ANALYSIS_QUESTION';
+      intent.confidence = 0.95;
+      wasCorrected = true;
+    }
+
+    if (wasCorrected) {
+      console.log('🔧 Intent classification corrected:', {
+        original: originalIntent,
+        corrected: intent,
+        corrections: corrections
+      });
+    }
+
     const enhancedIntent = {
       type: intent.type,
       confidence: intent.confidence || 0.7,
       entities: intent.entities || [],
-      requiresAnalysisData: this.intentCategories[intent.type].requiresAnalysisData,
+      requiresAnalysisData: this.intentCategories[intent.type]?.requiresAnalysisData || false,
       reasoning: intent.reasoning || 'OpenAI classification',
-      contextClues: intent.contextClues || [],
-      source: 'openai'
+      source: 'openai',
+      wasCorrected: wasCorrected,
+      corrections: corrections
     };
-    
-    // Apply validation rules
-    enhancedIntent.validated = this.applyValidationRules(enhancedIntent, query, context);
-    
-    return enhancedIntent;
-  }
 
-  applyValidationRules(intent, query, context) {
-    const rules = [];
-    
-    // Rule 1: If viewing analysis and asking about "the customer" → must be ANALYSIS_QUESTION
-    if (context.analysisId && this.refersToCurrentCustomer(query) && intent.type !== 'ANALYSIS_QUESTION') {
-      rules.push({
-        rule: 'current_customer_override',
-        original: intent.type,
-        corrected: 'ANALYSIS_QUESTION',
-        reason: 'Query refers to current customer while viewing analysis'
-      });
-      intent.type = 'ANALYSIS_QUESTION';
-      intent.confidence = 0.95;
-    }
-    
-    // Rule 2: Timeline questions with analysis context → ANALYSIS_QUESTION
-    if (context.analysisId && this.isTimelineQuestion(query) && intent.type === 'DATA_LOOKUP') {
-      rules.push({
-        rule: 'timeline_context_override',
-        original: intent.type,
-        corrected: 'ANALYSIS_QUESTION',
-        reason: 'Timeline question with analysis context should use loaded data'
-      });
-      intent.type = 'ANALYSIS_QUESTION';
-      intent.confidence = 0.9;
-    }
-    
-    return rules;
+    return enhancedIntent;
   }
 
   refersToCurrentCustomer(query) {
@@ -694,7 +663,7 @@ Requires Analysis Data: ${info.requiresAnalysisData}`;
     const timelineIndicators = [
       'timeline', 'implementation timeline', 'go live', 'go-live',
       'when do they', 'when does', 'target date', 'launch date',
-      'urgency', 'how soon', 'when', 'timeline'
+      'urgency', 'how soon', 'when', 'schedule'
     ];
     
     const queryLower = query.toLowerCase();
@@ -704,36 +673,30 @@ Requires Analysis Data: ${info.requiresAnalysisData}`;
   fallbackIntentClassification(query, context) {
     const queryLower = query.toLowerCase();
     
-    // High-confidence rule-based classification for critical cases
+    // Enhanced fallback with similar customers priority
+    if (this.isSimilarCustomersQuery(queryLower)) {
+      return {
+        type: 'SIMILAR_CUSTOMERS',
+        confidence: 0.9,
+        entities: ['similar', 'customers'],
+        requiresAnalysisData: true,
+        source: 'fallback-similar-customers',
+        reasoning: 'Fallback: Query about similar customers'
+      };
+    }
+    
     if (context.analysisId && this.refersToCurrentCustomer(query)) {
       return {
         type: 'ANALYSIS_QUESTION',
         confidence: 0.85,
         entities: [],
         requiresAnalysisData: true,
-        source: 'fallback-customer-context',
-        reasoning: 'Fallback: User asking about current customer while viewing analysis'
+        source: 'fallback-customer-context'
       };
     }
     
-    if (context.analysisId && this.isTimelineQuestion(query)) {
-      return {
-        type: 'ANALYSIS_QUESTION',
-        confidence: 0.8,
-        entities: ['timeline'],
-        requiresAnalysisData: true,
-        source: 'fallback-timeline-context',
-        reasoning: 'Fallback: Timeline question with analysis context'
-      };
-    }
-    
-    // Other fallback rules...
     if (queryLower.includes('business model')) {
       return { type: 'BUSINESS_MODEL', confidence: 0.7, entities: [], requiresAnalysisData: false, source: 'fallback' };
-    }
-    
-    if (queryLower.includes('similar')) {
-      return { type: 'SIMILAR_CUSTOMERS', confidence: 0.7, entities: [], requiresAnalysisData: true, source: 'fallback' };
     }
     
     if (queryLower.includes('email') || queryLower.includes('generate')) {
@@ -748,15 +711,13 @@ Requires Analysis Data: ${info.requiresAnalysisData}`;
       return { type: 'EXPLANATION', confidence: 0.7, entities: [], requiresAnalysisData: false, source: 'fallback' };
     }
     
-    // Default based on context
     if (context.analysisId) {
       return {
         type: 'ANALYSIS_QUESTION',
         confidence: 0.6,
         entities: [],
         requiresAnalysisData: true,
-        source: 'fallback-default-analysis',
-        reasoning: 'Fallback: Default to analysis question when viewing analysis'
+        source: 'fallback-default-analysis'
       };
     }
     
@@ -782,14 +743,14 @@ Requires Analysis Data: ${info.requiresAnalysisData}`;
         messages: [
           {
             role: 'system',
-            content: 'You are an expert intent classifier. Always respond with valid JSON only. Be precise and context-aware.'
+            content: 'You are an expert intent classifier. Always respond with valid JSON only. Be precise and context-aware. Pay special attention to similar customer queries.'
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        temperature: 0.1, // Low temperature for consistent classification
+        temperature: 0.1,
         max_tokens: options.maxTokens || 300
       },
       {
@@ -797,7 +758,7 @@ Requires Analysis Data: ${info.requiresAnalysisData}`;
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        timeout: 10000 // 10 second timeout
+        timeout: 10000
       }
     );
     
@@ -806,27 +767,21 @@ Requires Analysis Data: ${info.requiresAnalysisData}`;
 }
 
 /**
- * COMPLETE: Enhanced Conversational AI Service - All Features Preserved & Enhanced
+ * COMPLETE: Enhanced Conversational AI Service - All Features & Context-Rich Responses
  */
 class ConversationalAIService {
   constructor() {
     this.conversationContexts = new Map();
-    this.webCache = new Map(); // PRESERVED: Original cache
-    this.socialCache = new Map(); // PRESERVED: Original cache
-    this.companyDataCache = new Map(); // PRESERVED: Original cache
+    this.webCache = new Map();
+    this.socialCache = new Map();
+    this.companyDataCache = new Map();
     
-    // PRESERVED: Original business intelligence extractor (now enhanced)
     this.businessIntelligence = new BusinessIntelligenceExtractor();
     this.industryKnowledgeBase = this.initializeIndustryKnowledge();
-    
-    // ENHANCED: New capabilities
     this.companyExtractor = new CompanyNameExtractor();
     this.intentClassifier = new OpenAIIntentClassifier();
   }
 
-  /**
-   * PRESERVED: Initialize industry knowledge base (unchanged)
-   */
   initializeIndustryKnowledge() {
     return {
       'HVAC': {
@@ -848,20 +803,13 @@ class ConversationalAIService {
     };
   }
 
-  /**
-   * PRESERVED: Process user query (enhanced with better intent classification)
-   */
   async processQuery(query, options = {}) {
     try {
       const { analysisId, conversationId, userId } = options;
       
-      // PRESERVED: Get conversation context
       const context = await this.getContext(conversationId, analysisId);
-      
-      // ENHANCED: Classify user intent (now uses OpenAI + fallbacks)
       const intent = await this.classifyIntent(query, context);
       
-      // ENHANCED: Web enhancement for any company (not just main customer)
       let enhancementData = null;
       if (this.shouldEnhanceWithWebData(query, intent, context)) {
         try {
@@ -872,10 +820,8 @@ class ConversationalAIService {
         }
       }
       
-      // ENHANCED: Route to appropriate handler (supports all new intents)
       const response = await this.routeQuery(intent, query, context, enhancementData);
       
-      // PRESERVED: Update conversation context
       await this.updateContext(conversationId, {
         userQuery: query,
         botResponse: response,
@@ -902,9 +848,6 @@ class ConversationalAIService {
     }
   }
 
-  /**
-   * PRESERVED: Get conversation context (unchanged)
-   */
   async getContext(conversationId, analysisId) {
     const context = {
       conversationId,
@@ -913,7 +856,6 @@ class ConversationalAIService {
       conversationHistory: []
     };
 
-    // Get analysis data if analysisId provided
     if (analysisId) {
       try {
         console.log('Retrieving analysis for context:', analysisId);
@@ -922,15 +864,12 @@ class ConversationalAIService {
         if (analysis) {
           context.analysisData = analysis;
           console.log('Retrieved analysis with fields:', Object.keys(analysis));
-          console.log('Strengths count:', analysis.strengths?.length || 0);
-          console.log('Challenges count:', analysis.challenges?.length || 0);
         }
       } catch (error) {
         console.error('Error loading analysis for context:', error);
       }
     }
 
-    // Get conversation history if conversationId provided
     if (conversationId && this.conversationContexts.has(conversationId)) {
       context.conversationHistory = this.conversationContexts.get(conversationId);
     }
@@ -938,9 +877,6 @@ class ConversationalAIService {
     return context;
   }
 
-  /**
-   * PRESERVED: Update conversation context (unchanged)
-   */
   async updateContext(conversationId, update) {
     if (!conversationId) return;
 
@@ -951,22 +887,15 @@ class ConversationalAIService {
     const history = this.conversationContexts.get(conversationId);
     history.push(update);
 
-    // Keep only last 10 exchanges
     if (history.length > 10) {
       history.shift();
     }
   }
 
-  /**
-   * ENHANCED: Use OpenAI-powered intent classification
-   */
   async classifyIntent(query, context) {
     return await this.intentClassifier.classifyIntent(query, context);
   }
 
-  /**
-   * ENHANCED: Check if web enhancement should be attempted (supports external companies)
-   */
   shouldEnhanceWithWebData(query, intent, context) {
     const webEnhancementIntents = [
       'BUSINESS_MODEL', 'COMPANY_RESEARCH', 
@@ -981,9 +910,6 @@ class ConversationalAIService {
     return (hasWebIntent || hasWebKeywords) && isEnabled;
   }
 
-  /**
-   * ENHANCED: Gather web enhancement data (supports any company)
-   */
   async gatherWebEnhancement(targetCompany, analysisData = null) {
     if (!targetCompany) return null;
     
@@ -1001,9 +927,6 @@ class ConversationalAIService {
     return null;
   }
 
-  /**
-   * ENHANCED: Route query to appropriate handler (supports all intent types)
-   */
   async routeQuery(intent, query, context, enhancementData = null) {
     switch (intent.type) {
       case 'ANALYSIS_QUESTION':
@@ -1048,7 +971,7 @@ class ConversationalAIService {
   }
 
   /**
-   * ENHANCED: Handle analysis questions with improved timeline handling
+   * ENHANCED: Context-Rich Analysis Question Handler
    */
   async handleAnalysisQuestion(query, context) {
     if (!context.analysisData) {
@@ -1058,339 +981,365 @@ class ConversationalAIService {
     const analysisData = context.analysisData;
     const queryLower = query.toLowerCase();
 
-    // ENHANCED: Specific timeline handling
+    // ENHANCED: Specific timeline handling with full context
     if (queryLower.includes('timeline') || queryLower.includes('implementation') || 
         queryLower.includes('go live') || queryLower.includes('when') ||
         queryLower.includes('urgency') || queryLower.includes('target date')) {
       
-      const timelineInfo = analysisData.timeline;
-      let timelineResponse = `## Implementation Timeline for ${analysisData.customerName}\n\n`;
-      
-      if (timelineInfo?.desiredGoLive) {
-        timelineResponse += `**Desired Go-Live Date:** ${timelineInfo.desiredGoLive}\n`;
-      } else {
-        timelineResponse += `**Desired Go-Live Date:** Not specified in the analysis\n`;
-      }
-      
-      if (timelineInfo?.urgency) {
-        timelineResponse += `**Urgency Level:** ${timelineInfo.urgency}\n`;
-      }
-      
-      if (timelineInfo?.constraints && timelineInfo.constraints.length > 0) {
-        timelineResponse += `**Timeline Constraints:**\n`;
-        timelineInfo.constraints.forEach(constraint => {
-          timelineResponse += `• ${constraint}\n`;
-        });
-      }
-      
-      // Add implementation recommendation if available
-      if (analysisData.recommendations?.implementationApproach?.phases) {
-        const phases = analysisData.recommendations.implementationApproach.phases;
-        const totalDuration = phases.reduce((total, phase) => {
-          const weeks = parseInt(phase.duration) || 0;
-          return total + weeks;
-        }, 0);
-        
-        timelineResponse += `\n**Recommended Implementation Timeline:** ${totalDuration} weeks across ${phases.length} phases\n`;
-      }
-      
-      if (!timelineInfo?.desiredGoLive && !timelineInfo?.urgency && !timelineInfo?.constraints) {
-        timelineResponse += `\nThe customer did not specify a specific implementation timeline during the discovery call. You may want to follow up to understand their timeline requirements and any deadlines they're working towards.`;
-      }
-      
-      return timelineResponse;
+      return this.generateTimelineResponse(analysisData);
     }
 
-    // PRESERVED: General analysis questions with comprehensive data
+    // ENHANCED: Comprehensive analysis questions with rich context
     const prompt = `
-You are analyzing a SPECIFIC customer's situation. Use their ACTUAL data to give precise, factual answers.
+You are analyzing ${analysisData.customerName}'s specific situation. Use their ACTUAL data to give precise, actionable answers.
 
-CUSTOMER: ${analysisData.customerName}
-INDUSTRY: ${analysisData.industry}
-FIT SCORE: ${analysisData.fitScore}%
-USERS: ${analysisData.userCount?.total || 'Not specified'} total (${analysisData.userCount?.field || 'Not specified'} field workers)
+## CUSTOMER PROFILE
+**Company:** ${analysisData.customerName}
+**Industry:** ${analysisData.industry}
+**Fit Score:** ${analysisData.fitScore}% (${this.getFitScoreLevel(analysisData.fitScore)})
+**Team Size:** ${analysisData.userCount?.total || 'Unknown'} total users (${analysisData.userCount?.field || 0} field workers, ${analysisData.userCount?.backOffice || 0} office staff)
 
-TIMELINE INFORMATION:
-Desired Go-Live: ${analysisData.timeline?.desiredGoLive || 'Not specified'}
-Urgency: ${analysisData.timeline?.urgency || 'Not specified'}
-Constraints: ${analysisData.timeline?.constraints?.join(', ') || 'None specified'}
+## CURRENT CHALLENGES & PAIN POINTS
+${analysisData.challenges?.map(c => `• **${c.title}** (${c.severity} severity): ${c.description}`).join('\n') || '• No specific challenges identified'}
 
-BUDGET INFORMATION:
-${JSON.stringify(analysisData.budget, null, 2)}
+## KEY REQUIREMENTS
+${analysisData.requirements?.keyFeatures?.map(req => `• ${req}`).join('\n') || '• No specific requirements listed'}
 
-CURRENT STATE & SYSTEMS:
-${JSON.stringify(analysisData.currentState, null, 2)}
+## CURRENT SYSTEMS & PAIN POINTS
+${analysisData.currentState?.currentSystems?.map(sys => 
+  `• **${sys.name}**: ${sys.usage || 'Usage not specified'}${sys.painPoints?.length ? '\n  - Issues: ' + sys.painPoints.join(', ') : ''}`
+).join('\n') || '• No current systems data available'}
 
-SERVICES THEY PROVIDE:
-${analysisData.services ? JSON.stringify(analysisData.services, null, 2) : 'Not specified'}
+## INTEGRATION REQUIREMENTS
+${analysisData.requirements?.integrations?.map(int => 
+  `• **${int.system}** (${int.priority} priority): ${int.purpose}`
+).join('\n') || '• No integration requirements specified'}
 
-REQUIREMENTS & NEEDS:
-${JSON.stringify(analysisData.requirements, null, 2)}
+## IMPLEMENTATION CONTEXT
+**Timeline:** ${analysisData.timeline?.desiredGoLive || 'Not specified'} | **Urgency:** ${analysisData.timeline?.urgency || 'Not specified'}
+**Budget:** ${analysisData.budget?.mentioned ? (analysisData.budget.range || 'Budget discussed but range not detailed') : 'Budget not discussed'}
 
-ACTUAL STRENGTHS:
-${analysisData.strengths?.map(s => `• ${s.title}: ${s.description}`).join('\n') || 'None listed'}
+## SALES RECOMMENDATION
+**Strategy:** ${analysisData.recommendations?.salesStrategy?.recommendation || 'No specific recommendation available'}
+**Reasoning:** ${analysisData.recommendations?.fitScoreRationale?.summary || 'No detailed reasoning provided'}
 
-ACTUAL CHALLENGES:
-${analysisData.challenges?.map(c => `• ${c.title}: ${c.description} (Severity: ${c.severity})`).join('\n') || 'None listed'}
-
-SALES RECOMMENDATION: ${analysisData.recommendations?.salesStrategy?.recommendation || 'Not specified'}
+**Positive Factors:** ${analysisData.recommendations?.fitScoreRationale?.positiveFactors?.join(', ') || 'None specified'}
+**Challenges:** ${analysisData.recommendations?.fitScoreRationale?.negativeFactors?.join(', ') || 'None specified'}
 
 USER QUESTION: "${query}"
 
-CRITICAL INSTRUCTIONS:
-1. Use ONLY the actual data provided above - never say data is "not available" if it exists
-2. If asked about timeline, reference the specific timeline information shown above
-3. If asked about budget, use the budget data above
-4. Be specific and factual - quote their actual information
-5. Reference their actual company name, industry, and specific numbers
+INSTRUCTIONS:
+1. Use ONLY the actual data provided above
+2. Be specific and reference their exact company name, numbers, and details
+3. Provide actionable insights based on their specific situation
+4. If data is missing, clearly state what information would be helpful to gather
+5. Connect your answer to their business context and specific needs
 
-Be specific, factual, and data-driven. Use their actual company details and real information.`;
-
-    return await this.callOpenAI(prompt);
-  }
-
-  /**
-   * PRESERVED: Handle business model questions (enhanced for main customer)
-   */
-  async handleBusinessModelQuestion(query, context, enhancementData = null) {
-    const analysisData = context.analysisData;
-    
-    const prompt = `
-Analyze the business model for ${analysisData.customerName} using all available intelligence.
-
-INTERNAL ANALYSIS:
-${JSON.stringify({
-      customerName: analysisData.customerName,
-      industry: analysisData.industry,
-      services: analysisData.services,
-      requirements: analysisData.requirements,
-      userCount: analysisData.userCount,
-      currentState: analysisData.currentState
-    }, null, 2)}
-
-${enhancementData ? `
-WEB INTELLIGENCE:
-${JSON.stringify(enhancementData, null, 2)}
-` : 'No web intelligence available.'}
-
-USER QUESTION: "${query}"
-
-Provide comprehensive business model analysis:
-
-1. **Business Model Classification:**
-   - Primary model (B2B/B2C/Mixed) with confidence level
-   - Supporting evidence from internal analysis and web intelligence
-   - Industry benchmarks and typical patterns
-
-2. **Customer Segments:**
-   - Specific customer types they serve
-   - Market segments and target demographics
-   - Service delivery approach
-
-3. **Revenue Model Implications:**
-   - Estimated revenue range based on size and industry
-   - Pricing model implications (contract vs. transactional)
-   - Growth indicators and market position
-
-4. **Field Service Software Implications:**
-   - How business model affects software requirements
-   - B2B vs B2C feature needs (scheduling, billing, customer management)
-   - Implementation complexity and approach
-
-5. **Sales Strategy Recommendations:**
-   - Approach based on business model and market position
-   - Key decision makers and stakeholders
-   - Value proposition alignment
-
-Reference specific data points from both internal analysis and web intelligence when available.`;
+Provide a comprehensive, well-formatted response that directly addresses their question using their specific data.`;
 
     return await this.callOpenAI(prompt, { maxTokens: 1200 });
   }
 
   /**
-   * PRESERVED: Handle company research (enhanced)
-   */
-  async handleCompanyResearch(query, context, enhancementData = null) {
-    const analysisData = context.analysisData;
-    
-    const prompt = `
-Provide comprehensive company intelligence for ${analysisData.customerName}.
-
-INTERNAL ANALYSIS:
-${JSON.stringify({
-      customerName: analysisData.customerName,
-      industry: analysisData.industry,
-      userCount: analysisData.userCount,
-      currentState: analysisData.currentState,
-      fitScore: analysisData.fitScore
-    }, null, 2)}
-
-${enhancementData ? `
-WEB INTELLIGENCE:
-${JSON.stringify(enhancementData, null, 2)}
-` : 'No web intelligence available.'}
-
-USER QUESTION: "${query}"
-
-Provide detailed company profile combining internal analysis with available web intelligence.`;
-
-    return await this.callOpenAI(prompt, { maxTokens: 1000 });
-  }
-
-  /**
-   * ENHANCED: Handle similar customers queries with specific customer detection
+   * ENHANCED: Context-Rich Similar Customers Handler
    */
   async handleSimilarCustomersQuery(query, context) {
     if (!context.analysisData?.similarCustomers) {
       return "No similar customers data is available for this analysis.";
     }
 
-    // Check if asking about a specific similar customer
-    const externalCompany = this.companyExtractor.extractCompanyFromQuery(query);
-    if (externalCompany.found) {
-      const similarCustomer = this.companyExtractor.findInSimilarCustomers(externalCompany.companyName, context);
-      if (similarCustomer) {
-        return await this.handleSpecificSimilarCustomer(query, context, similarCustomer);
+    const analysisData = context.analysisData;
+    
+    const prompt = `
+You are a field service software sales expert providing strategic insights about similar customers for ${analysisData.customerName}.
+
+## CURRENT PROSPECT COMPLETE PROFILE
+**Company:** ${analysisData.customerName}
+**Industry:** ${analysisData.industry}
+**Size:** ${analysisData.userCount?.total || 'Unknown'} total users (${analysisData.userCount?.field || 0} field workers)
+**Fit Score:** ${analysisData.fitScore}% (${this.getFitScoreLevel(analysisData.fitScore)})
+
+### Current Challenges & Pain Points
+${analysisData.challenges?.map(c => `• **${c.title}** (${c.severity} severity): ${c.description}`).join('\n') || '• No specific challenges identified'}
+
+### Key Requirements
+${analysisData.requirements?.keyFeatures?.map(req => `• ${req}`).join('\n') || '• No specific requirements listed'}
+
+### Current Systems & Issues
+${analysisData.currentState?.currentSystems?.map(sys => 
+  `• **${sys.name}**: ${sys.usage || 'Usage not specified'}${sys.painPoints?.length ? ' | Issues: ' + sys.painPoints.join(', ') : ''}`
+).join('\n') || '• No current systems data available'}
+
+### Integration Needs
+${analysisData.requirements?.integrations?.map(int => 
+  `• **${int.system}** (${int.priority} priority): ${int.purpose}`
+).join('\n') || '• No integration requirements specified'}
+
+### Implementation Context
+**Timeline:** ${analysisData.timeline?.desiredGoLive || 'Not specified'} | **Urgency:** ${analysisData.timeline?.urgency || 'Not specified'}
+**Budget:** ${analysisData.budget?.mentioned ? (analysisData.budget.range || 'Budget discussed') : 'Budget not discussed'}
+
+### Current Sales Recommendation
+**Strategy:** ${analysisData.recommendations?.salesStrategy?.recommendation || 'No specific recommendation'}
+
+## SIMILAR CUSTOMERS DATA
+${JSON.stringify(analysisData.similarCustomers, null, 2)}
+
+USER QUESTION: "${query}"
+
+## PROVIDE STRATEGIC SIMILAR CUSTOMER ANALYSIS
+
+Generate a comprehensive, well-formatted response that includes:
+
+### 🎯 **Most Relevant Similar Customer Matches**
+Identify the TOP 2-3 most relevant customers for ${analysisData.customerName} and explain SPECIFICALLY why they're relevant:
+- Size/industry alignment
+- Similar challenges or use cases
+- Comparable implementation complexity
+- Reference their actual success metrics
+
+### 📊 **Key Strategic Insights**
+- What worked well for similar customers that applies to ${analysisData.customerName}?
+- What challenges did similar customers face that we should watch for?
+- How do implementation timelines and outcomes compare?
+- What patterns emerge across successful implementations?
+
+### 🚀 **Actionable Lessons for ${analysisData.customerName}**
+Based on their specific challenges (${analysisData.challenges?.map(c => c.title).join(', ') || 'none identified'}):
+- What specific lessons can we apply?
+- How do similar customer outcomes inform our ${analysisData.fitScore}% fit score approach?
+- What proven strategies should we emphasize?
+
+### 💼 **Sales Strategy Application**
+- How should these insights influence our sales approach?
+- What success stories can we reference in conversations?
+- What potential objections can we preemptively address?
+- Which similar customers would make good references?
+
+### ⚠️ **Implementation Risk Assessment**
+- What are the likely implementation risks based on similar customers?
+- What factors contributed to successful vs. challenging implementations?
+- How can we position ourselves for success with ${analysisData.customerName}?
+
+Use specific data points, metrics, and customer examples. Make it actionable and directly relevant to ${analysisData.customerName}'s situation.`;
+
+    return await this.callOpenAI(prompt, { maxTokens: 1800 });
+  }
+
+  /**
+   * ENHANCED: Timeline Response Generator
+   */
+  generateTimelineResponse(analysisData) {
+    const timelineInfo = analysisData.timeline;
+    let response = `# 📅 Implementation Timeline Analysis for ${analysisData.customerName}\n\n`;
+    
+    // Timeline specifics with context
+    if (timelineInfo?.desiredGoLive) {
+      response += `## 🎯 **Desired Go-Live Date**\n${timelineInfo.desiredGoLive}\n\n`;
+    } else {
+      response += `## 🎯 **Desired Go-Live Date**\n❌ Not specified during discovery call\n*Recommendation: Follow up to understand their timeline requirements*\n\n`;
+    }
+    
+    if (timelineInfo?.urgency) {
+      response += `## ⚡ **Urgency Level**\n**${timelineInfo.urgency}**\n`;
+      
+      if (timelineInfo.urgency === 'High') {
+        response += `*⚠️ High urgency may require accelerated implementation approach and dedicated resources*\n\n`;
+      } else if (timelineInfo.urgency === 'Low') {
+        response += `*✅ Flexible timeline allows for thorough planning and phased implementation*\n\n`;
+      } else {
+        response += `*📋 Standard implementation timeline approach recommended*\n\n`;
       }
     }
-
-    // PRESERVED: General similar customers logic
-    const prompt = `
-Analyze and explain similar customers for this prospect.
-
-CURRENT PROSPECT:
-${context.analysisData.customerName} - ${context.analysisData.industry}
-${context.analysisData.userCount?.total} users (${context.analysisData.userCount?.field} field workers)
-
-SIMILAR CUSTOMERS:
-${JSON.stringify(context.analysisData.similarCustomers, null, 2)}
-
-USER QUESTION: "${query}"
-
-Provide insights about the similar customers, what we can learn from them, and how it applies to the current prospect.
-Include specific success stories, implementation lessons, or risk factors based on the question.
-
-Be conversational and actionable.`;
-
-    return await this.callOpenAI(prompt);
-  }
-
-  /**
-   * NEW: Handle business model questions about specific similar customers
-   */
-  async handleSimilarCustomerBusinessModel(query, context, similarCustomer, enhancementData = null) {
-    if (!similarCustomer) {
-      return "I couldn't find the specific similar customer you're asking about.";
+    
+    // Timeline constraints with business impact
+    if (timelineInfo?.constraints && timelineInfo.constraints.length > 0) {
+      response += `## 🚫 **Timeline Constraints**\n`;
+      timelineInfo.constraints.forEach(constraint => {
+        response += `• ${constraint}\n`;
+      });
+      response += `\n`;
     }
     
-    const prompt = `
-Analyze the business model for the similar customer: ${similarCustomer.customerName}
-
-SIMILAR CUSTOMER DATA:
-${JSON.stringify(similarCustomer, null, 2)}
-
-CURRENT PROSPECT CONTEXT:
-Main Customer: ${context.analysisData.customerName}
-Industry: ${context.analysisData.industry}
-
-${enhancementData ? `
-WEB INTELLIGENCE FOR ${similarCustomer.customerName}:
-${JSON.stringify(enhancementData, null, 2)}
-` : 'No web intelligence available for this similar customer.'}
-
-USER QUESTION: "${query}"
-
-Provide comprehensive business model analysis for ${similarCustomer.customerName} with specific insights about their implementation success and relevance to the current prospect.`;
-
-    return await this.callOpenAI(prompt, { maxTokens: 1000 });
-  }
-
-  /**
-   * NEW: Handle other questions about specific similar customers
-   */
-  async handleSpecificSimilarCustomer(query, context, similarCustomer) {
-    if (!similarCustomer) {
-      return "I couldn't find the specific similar customer you're asking about.";
+    // Implementation recommendation with phases
+    if (analysisData.recommendations?.implementationApproach?.phases) {
+      const phases = analysisData.recommendations.implementationApproach.phases;
+      const totalDuration = phases.reduce((total, phase) => {
+        const weeks = parseInt(phase.duration) || 0;
+        return total + weeks;
+      }, 0);
+      
+      response += `## 🗓️ **Recommended Implementation Timeline**\n`;
+      response += `**Total Duration:** ${totalDuration} weeks across ${phases.length} phases\n\n`;
+      
+      phases.forEach((phase, index) => {
+        response += `### Phase ${phase.phase}: ${phase.name}\n`;
+        response += `**Duration:** ${phase.duration}\n`;
+        if (phase.activities && phase.activities.length > 0) {
+          response += `**Key Activities:**\n`;
+          phase.activities.forEach(activity => {
+            response += `• ${activity}\n`;
+          });
+        }
+        response += `\n`;
+      });
     }
     
-    const prompt = `
-Answer questions about the specific similar customer: ${similarCustomer.customerName}
-
-SIMILAR CUSTOMER DATA:
-${JSON.stringify(similarCustomer, null, 2)}
-
-CURRENT PROSPECT CONTEXT:
-Main Customer: ${context.analysisData.customerName}
-Industry: ${context.analysisData.industry}
-
-USER QUESTION: "${query}"
-
-Provide specific information about ${similarCustomer.customerName} based on the question asked.
-Reference their actual data points and implementation experience.
-Compare/contrast with the main prospect ${context.analysisData.customerName} when relevant.`;
-
-    return await this.callOpenAI(prompt, { maxTokens: 800 });
+    // Strategic timeline insights
+    response += `## 💡 **Strategic Timeline Insights**\n`;
+    
+    if (analysisData.fitScore >= 80) {
+      response += `• **High Fit Score (${analysisData.fitScore}%)** suggests smooth implementation timeline\n`;
+    } else if (analysisData.fitScore < 60) {
+      response += `• **Lower Fit Score (${analysisData.fitScore}%)** may require extended timeline for customization\n`;
+    }
+    
+    if (analysisData.requirements?.integrations?.length > 3) {
+      response += `• **Multiple Integrations (${analysisData.requirements.integrations.length})** may extend implementation timeline\n`;
+    }
+    
+    if (analysisData.userCount?.total > 100) {
+      response += `• **Large User Base (${analysisData.userCount.total} users)** requires phased rollout approach\n`;
+    }
+    
+    if (!timelineInfo?.desiredGoLive && !timelineInfo?.urgency) {
+      response += `\n## 🎯 **Next Steps**\n`;
+      response += `• Schedule follow-up to discuss specific timeline requirements\n`;
+      response += `• Understand any business deadlines or seasonal considerations\n`;
+      response += `• Clarify decision-making timeline and approval process\n`;
+    }
+    
+    return response;
   }
 
   /**
-   * NEW: Handle business model questions about external companies
+   * UTILITY: Get fit score level description
    */
-  async handleExternalCompanyBusinessModel(query, context, externalCompany, enhancementData = null) {
+  getFitScoreLevel(score) {
+    if (score >= 80) return 'Excellent Fit';
+    if (score >= 60) return 'Good Fit';
+    if (score >= 40) return 'Moderate Fit';
+    return 'Challenging Fit';
+  }
+
+  /**
+   * PRESERVED: Business Model Question Handler
+   */
+  async handleBusinessModelQuestion(query, context, enhancementData = null) {
+    const analysisData = context.analysisData;
+    
     const prompt = `
-Analyze the business model for the external company: ${externalCompany}
+Analyze the business model for ${analysisData.customerName} using comprehensive intelligence.
+
+## INTERNAL ANALYSIS
+**Company:** ${analysisData.customerName}
+**Industry:** ${analysisData.industry}
+**Size:** ${analysisData.userCount?.total || 'Unknown'} users (${analysisData.userCount?.field || 0} field workers)
+
+**Services:** ${analysisData.services?.types?.join(', ') || 'Not specified'}
+**Customer Base Indicators:** ${analysisData.services?.details || 'Not detailed'}
+
+**Current Systems:** ${analysisData.currentState?.currentSystems?.map(sys => sys.name).join(', ') || 'None specified'}
 
 ${enhancementData ? `
-WEB INTELLIGENCE FOR ${externalCompany}:
+## WEB INTELLIGENCE
 ${JSON.stringify(enhancementData, null, 2)}
-` : 'No web intelligence available - provide analysis based on company name and industry patterns.'}
-
-${context.analysisData ? `
-CURRENT ANALYSIS CONTEXT:
-Main Customer: ${context.analysisData.customerName}
-Industry: ${context.analysisData.industry}
-
-Compare/contrast with the main customer where relevant.
-` : 'No current analysis context.'}
+` : '## WEB INTELLIGENCE\nNo web intelligence available.'}
 
 USER QUESTION: "${query}"
 
-Provide comprehensive business model analysis for ${externalCompany} and actionable business intelligence.`;
+Provide comprehensive business model analysis with specific evidence and actionable insights for field service software sales.`;
 
     return await this.callOpenAI(prompt, { maxTokens: 1200 });
   }
 
   /**
-   * NEW: Handle general research questions about external companies
+   * NEW: External Company Business Model Handler
+   */
+  async handleExternalCompanyBusinessModel(query, context, externalCompany, enhancementData = null) {
+    const prompt = `
+Analyze the business model for external company: **${externalCompany}**
+
+${enhancementData ? `
+## WEB INTELLIGENCE FOR ${externalCompany}
+${JSON.stringify(enhancementData, null, 2)}
+` : `## WEB INTELLIGENCE
+No web intelligence available - providing analysis based on company name and industry patterns.`}
+
+${context.analysisData ? `
+## CURRENT ANALYSIS CONTEXT
+**Main Customer:** ${context.analysisData.customerName} (${context.analysisData.industry})
+**For Comparison/Reference**
+` : '## CONTEXT\nNo current analysis context.'}
+
+USER QUESTION: "${query}"
+
+Provide comprehensive business model analysis for ${externalCompany}:
+
+### 🏢 **Business Model Classification**
+- Primary model (B2B/B2C/Mixed) with confidence level
+- Supporting evidence from available data
+- Industry context and typical patterns
+
+### 👥 **Target Customer Analysis** 
+- Likely customer segments served
+- Market positioning and approach
+- Service delivery model
+
+### 💰 **Revenue Model Implications**
+- Estimated business size and scope
+- Pricing model insights
+- Market positioning indicators
+
+### 🔧 **Field Service Software Implications**
+- Software needs based on business model
+- Implementation complexity expectations
+- Competitive positioning insights
+
+${context.analysisData ? `
+### 📊 **Comparison with ${context.analysisData.customerName}**
+- Similarities and differences in business approach
+- Competitive insights and market positioning
+- Strategic implications for our sales approach
+` : ''}
+
+Focus specifically on ${externalCompany} and provide actionable business intelligence.`;
+
+    return await this.callOpenAI(prompt, { maxTokens: 1200 });
+  }
+
+  /**
+   * NEW: External Company Research Handler
    */
   async handleExternalCompanyResearch(query, context, externalCompany, enhancementData = null) {
     const prompt = `
-Provide comprehensive company intelligence for the external company: ${externalCompany}
+Provide comprehensive company intelligence for: **${externalCompany}**
 
 ${enhancementData ? `
-WEB INTELLIGENCE FOR ${externalCompany}:
+## WEB INTELLIGENCE FOR ${externalCompany}
 ${JSON.stringify(enhancementData, null, 2)}
-` : 'No web intelligence available - provide analysis based on company name and industry patterns.'}
+` : `## WEB INTELLIGENCE
+No web intelligence available - providing analysis based on company name and industry patterns.`}
 
 ${context.analysisData ? `
-CURRENT ANALYSIS CONTEXT:
-Main Customer: ${context.analysisData.customerName}
-Industry: ${context.analysisData.industry}
-` : 'No current analysis context.'}
+## CURRENT ANALYSIS CONTEXT
+**Main Customer:** ${context.analysisData.customerName} (${context.analysisData.industry})
+` : ''}
 
 USER QUESTION: "${query}"
 
 Provide detailed company profile for ${externalCompany} addressing the specific question asked.
-Include business intelligence, market position, and any competitive insights available.
+Include business intelligence, market position, and competitive insights when available.
 
 ${context.analysisData ? `
-Compare or contrast with ${context.analysisData.customerName} where relevant.
+Reference comparisons with ${context.analysisData.customerName} where relevant.
 ` : ''}`;
 
     return await this.callOpenAI(prompt, { maxTokens: 1000 });
   }
 
   /**
-   * PRESERVED: Handle next steps and strategy questions (unchanged)
+   * PRESERVED: Enhanced Next Steps Handler
    */
   async handleNextStepsQuery(query, context) {
     const analysisData = context.analysisData;
@@ -1399,37 +1348,50 @@ Compare or contrast with ${context.analysisData.customerName} where relevant.
     }
 
     const prompt = `
-You are a sales strategy AI assistant. Provide specific, actionable next steps.
+You are a sales strategy AI assistant for ${analysisData.customerName}. Provide specific, actionable next steps.
 
-PROSPECT ANALYSIS:
-Customer: ${analysisData.customerName}
-Industry: ${analysisData.industry}  
-Fit Score: ${analysisData.fitScore}%
-Recommendation: ${analysisData.recommendations?.salesStrategy?.recommendation}
-Timeline: ${analysisData.timeline?.desiredGoLive}
+## PROSPECT ANALYSIS
+**Customer:** ${analysisData.customerName} (${analysisData.industry})
+**Fit Score:** ${analysisData.fitScore}% (${this.getFitScoreLevel(analysisData.fitScore)})
+**Team Size:** ${analysisData.userCount?.total || 'Unknown'} users
+**Timeline:** ${analysisData.timeline?.desiredGoLive || 'TBD'} | **Urgency:** ${analysisData.timeline?.urgency || 'Unknown'}
 
-CURRENT SALES STRATEGY:
-${JSON.stringify(analysisData.recommendations?.salesStrategy, null, 2)}
+## CURRENT CHALLENGES
+${analysisData.challenges?.map(c => `• ${c.title} (${c.severity}): ${c.description}`).join('\n') || '• No specific challenges identified'}
 
-IMPLEMENTATION APPROACH:
-${JSON.stringify(analysisData.recommendations?.implementationApproach, null, 2)}
+## KEY REQUIREMENTS
+${analysisData.requirements?.keyFeatures?.join('\n• ') || '• No specific requirements listed'}
+
+## SALES STRATEGY & RECOMMENDATIONS
+**Recommendation:** ${analysisData.recommendations?.salesStrategy?.recommendation || 'No specific recommendation'}
+**Approach:** ${analysisData.recommendations?.salesStrategy?.approach || 'Standard approach recommended'}
 
 USER QUESTION: "${query}"
 
-Provide specific, actionable next steps. Include:
-- Immediate actions (next 1-2 days)
-- Short-term strategy (next 1-2 weeks) 
-- Key talking points for next conversation
-- Potential objections and how to handle them
-- Timeline recommendations
+Provide specific, actionable next steps formatted as:
 
-Be practical and sales-focused.`;
+### 🎯 **Immediate Actions (Next 1-2 Days)**
+• [Specific action items based on their situation]
 
-    return await this.callOpenAI(prompt);
+### 📋 **Short-term Strategy (Next 1-2 Weeks)**  
+• [Strategic initiatives to advance the sale]
+
+### 💬 **Key Talking Points for Next Conversation**
+• [Specific points to address based on their challenges/requirements]
+
+### 🛡️ **Potential Objections & Responses**
+• [Likely objections based on their fit score and how to handle them]
+
+### ⏰ **Timeline Recommendations**
+• [Specific timing advice based on their urgency and requirements]
+
+Be practical, sales-focused, and specific to ${analysisData.customerName}'s situation.`;
+
+    return await this.callOpenAI(prompt, { maxTokens: 1200 });
   }
 
   /**
-   * PRESERVED: Handle email generation requests (unchanged)
+   * PRESERVED: Enhanced Email Generation Handler
    */
   async handleEmailGeneration(query, context) {
     const analysisData = context.analysisData;
@@ -1440,42 +1402,49 @@ Be practical and sales-focused.`;
     const emailType = this.detectEmailType(query);
     
     const prompt = `
-Generate a professional, personalized ${emailType} email.
+Generate a professional, personalized ${emailType} email for ${analysisData.customerName}.
 
-CUSTOMER CONTEXT:
-Name: ${analysisData.customerName}
-Industry: ${analysisData.industry}
-Users: ${analysisData.userCount?.total}
-Fit Score: ${analysisData.fitScore}%
-Key Requirements: ${analysisData.requirements?.keyFeatures?.join(', ') || 'Not specified'}
-Main Challenges: ${analysisData.challenges?.map(c => c.title).join(', ') || 'None'}
-Recommendation: ${analysisData.recommendations?.salesStrategy?.recommendation}
+## CUSTOMER CONTEXT
+**Company:** ${analysisData.customerName} (${analysisData.industry})
+**Contact:** [Name to be filled in]
+**Team Size:** ${analysisData.userCount?.total || 'Unknown'} users
+**Fit Score:** ${analysisData.fitScore}%
+
+## KEY INSIGHTS TO REFERENCE
+**Main Challenges:** ${analysisData.challenges?.map(c => c.title).join(', ') || 'General efficiency improvements'}
+**Key Requirements:** ${analysisData.requirements?.keyFeatures?.slice(0, 3).join(', ') || 'Field service management capabilities'}
+**Timeline:** ${analysisData.timeline?.desiredGoLive || 'To be determined'}
+**Current Systems:** ${analysisData.currentState?.currentSystems?.map(sys => sys.name).join(', ') || 'Legacy systems'}
+
+## SALES RECOMMENDATION
+**Strategy:** ${analysisData.recommendations?.salesStrategy?.recommendation || 'Standard approach'}
 
 USER REQUEST: "${query}"
 
 Generate a professional email with:
-- Appropriate subject line
-- Personalized content based on their specific situation
+
+### Subject Line
+[Compelling, personalized subject line]
+
+### Email Body
+- Professional greeting
+- Personalized content referencing their specific situation
+- Value proposition aligned to their challenges
 - Clear next steps
-- Professional tone
+- Professional closing
 
-Format as:
-Subject: [subject line]
+**Important:** Reference their actual challenges, requirements, and business context to make it highly personalized and relevant.`;
 
-[email body]`;
-
-    return await this.callOpenAI(prompt);
+    return await this.callOpenAI(prompt, { maxTokens: 800 });
   }
 
   /**
-   * PRESERVED: Handle data lookup requests (unchanged)
+   * PRESERVED: Data Lookup Handler
    */
   async handleDataLookup(query, context) {
     try {
-      // Extract search terms
       const searchTerms = this.extractSearchTerms(query);
       
-      // Search historical data using existing service
       const db = await getDb();
       const analysesCollection = db.collection('analyses');
       
@@ -1486,19 +1455,26 @@ Subject: [subject line]
             { industry: { $regex: searchTerms.join('|'), $options: 'i' } }
           ]
         })
-        .limit(5)
+        .limit(10)
         .toArray();
 
       const prompt = `
-You are a data lookup assistant. Answer the user's question based on the search results.
+You are a data lookup assistant. Answer the user's question based on search results.
 
 USER QUERY: "${query}"
 
-SEARCH RESULTS:
-${JSON.stringify(results.slice(0, 5), null, 2)}
+SEARCH RESULTS (${results.length} found):
+${results.map(r => 
+  `• **${r.customerName}** (${r.industry}) - Fit Score: ${r.fitScore}% - ${r.userCount?.total || 'Unknown'} users`
+).join('\n')}
 
-Provide a helpful summary of the findings. If no relevant results found, suggest alternative search terms.
-Be conversational and suggest follow-up questions.`;
+Provide a helpful summary of findings with:
+1. **Key Insights** from the search results
+2. **Patterns or Trends** if applicable  
+3. **Recommendations** for follow-up actions
+4. **Alternative search suggestions** if results are limited
+
+Be conversational and actionable.`;
 
       return await this.callOpenAI(prompt);
       
@@ -1508,28 +1484,36 @@ Be conversational and suggest follow-up questions.`;
   }
 
   /**
-   * PRESERVED: Handle explanation requests (unchanged)
+   * PRESERVED: Explanation Handler
    */
   async handleExplanation(query, context) {
     const prompt = `
 You are an expert on field service management software and customer analysis.
-Explain concepts clearly and provide practical insights.
+Explain concepts clearly with practical insights.
 
 USER QUESTION: "${query}"
 
-Provide a clear, helpful explanation. Include:
-- Main concept definition
-- Why it matters in field service software sales
-- Practical examples
-- How it relates to customer success
+Provide a clear, helpful explanation including:
 
-Be educational but conversational.`;
+### 📚 **Concept Definition**
+[Clear explanation of the main concept]
+
+### 🎯 **Why It Matters in Field Service Software Sales**
+[Business relevance and importance]
+
+### 💡 **Practical Examples**
+[Real-world examples and use cases]
+
+### 🔗 **How It Relates to Customer Success**
+[Connection to successful implementations]
+
+Be educational but conversational, with actionable insights.`;
 
     return await this.callOpenAI(prompt);
   }
 
   /**
-   * PRESERVED: Handle general conversation (unchanged)
+   * PRESERVED: General Query Handler
    */
   async handleGeneralQuery(query, context) {
     const prompt = `
@@ -1537,18 +1521,22 @@ You are a helpful AI assistant for a field service management software company.
 You help sales teams analyze customer fit and make better decisions.
 
 ${context.analysisData ? 
-  `Current context: User is viewing analysis for ${context.analysisData.customerName} (${context.analysisData.industry})` : 
-  'No specific analysis context.'}
+  `## CURRENT CONTEXT
+You're currently viewing analysis for **${context.analysisData.customerName}** (${context.analysisData.industry})
+Fit Score: ${context.analysisData.fitScore}% | Users: ${context.analysisData.userCount?.total || 'Unknown'}` : 
+  '## CONTEXT\nNo specific customer analysis currently loaded.'}
 
 USER QUERY: "${query}"
 
-Provide a helpful response and suggest how you can assist with customer analysis tasks.`;
+Provide a helpful response and suggest specific ways you can assist with customer analysis tasks.
+
+Format your response clearly with relevant suggestions for how to leverage the customer analysis platform.`;
 
     return await this.callOpenAI(prompt);
   }
 
   /**
-   * PRESERVED: Helper methods (unchanged)
+   * PRESERVED: Helper Methods
    */
   detectEmailType(query) {
     const queryLower = query.toLowerCase();
@@ -1556,6 +1544,7 @@ Provide a helpful response and suggest how you can assist with customer analysis
     if (queryLower.includes('intro') || queryLower.includes('introduction')) return 'introduction';
     if (queryLower.includes('proposal') || queryLower.includes('quote')) return 'proposal';
     if (queryLower.includes('thank')) return 'thank you';
+    if (queryLower.includes('meeting') || queryLower.includes('demo')) return 'meeting invitation';
     return 'professional';
   }
 
@@ -1569,9 +1558,6 @@ Provide a helpful response and suggest how you can assist with customer analysis
     return [...new Set(terms)];
   }
 
-  /**
-   * PRESERVED: Call OpenAI API (unchanged)
-   */
   async callOpenAI(prompt, options = {}) {
     try {
       const apiKey = process.env.OPENAI_API_KEY;
@@ -1588,7 +1574,7 @@ Provide a helpful response and suggest how you can assist with customer analysis
           messages: [
             {
               role: 'system',
-              content: 'You are an expert AI assistant for field service management software sales. Provide accurate, helpful, and actionable responses.'
+              content: 'You are an expert AI assistant for field service management software sales. Provide accurate, helpful, and well-formatted responses using markdown. Be specific and actionable.'
             },
             {
               role: 'user',
@@ -1596,7 +1582,7 @@ Provide a helpful response and suggest how you can assist with customer analysis
             }
           ],
           temperature: 0.3,
-          max_tokens: options.maxTokens || 800
+          max_tokens: options.maxTokens || 1000
         },
         {
           headers: {
