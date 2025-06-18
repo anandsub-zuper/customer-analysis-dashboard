@@ -26,7 +26,8 @@
     "google-auth-library": "^9.0.0",
     "mongodb": "^4.16.0",
     "googleapis": "^126.0.1",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "cheerio": "^1.0.0-rc.12"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
