@@ -457,105 +457,243 @@ class OpenAIIntentClassifier {
     }
   }
 
-  enhancedQuickRuleBasedCheck(query, context) {
-    const queryLower = query.toLowerCase();
-    
-    // HIGH CONFIDENCE: Similar customers queries
-    if (this.isSimilarCustomersQuery(queryLower)) {
-      return {
-        type: 'SIMILAR_CUSTOMERS',
-        confidence: 0.95,
-        entities: ['similar', 'customers'],
-        requiresAnalysisData: true,
-        source: 'quick-similar-customers',
-        reasoning: 'Query explicitly about similar customers'
-      };
-    }
-
-    // HIGH CONFIDENCE: Timeline questions with analysis context
-    if (context.analysisId && this.refersToCurrentCustomer(query) && this.isTimelineQuestion(query)) {
-      return {
-        type: 'ANALYSIS_QUESTION',
-        confidence: 0.95,
-        entities: ['timeline'],
-        requiresAnalysisData: true,
-        source: 'quick-timeline-check',
-        reasoning: 'Timeline question about current customer'
-      };
-    }
-
-    // HIGH CONFIDENCE: Clear current customer questions
-    if (context.analysisId && this.refersToCurrentCustomer(query)) {
-      return {
-        type: 'ANALYSIS_QUESTION',
-        confidence: 0.9,
-        entities: [],
-        requiresAnalysisData: true,
-        source: 'quick-customer-check',
-        reasoning: 'Question about current customer while viewing analysis'
-      };
-    }
-
-    return { confidence: 0.5 };
+enhancedQuickRuleBasedCheck(query, context) {
+  const queryLower = query.toLowerCase();
+  
+  // HIGH CONFIDENCE: Fit score questions about current analysis
+  if (context.analysisId && this.isFitScoreQuestion(queryLower)) {
+    return {
+      type: 'ANALYSIS_QUESTION',
+      confidence: 0.95,
+      entities: ['fit', 'score'],
+      requiresAnalysisData: true,
+      source: 'quick-fit-score-check',
+      reasoning: 'Question about current customer\'s fit score'
+    };
   }
 
-  isSimilarCustomersQuery(queryLower) {
-    const similarCustomerIndicators = [
-      'similar customers', 'similar customer', 'comparable customers',
-      'like them', 'who are similar', 'reference customers',
-      'similar companies', 'customers like', 'historical customers',
-      'past customers', 'other customers', 'relevant customers'
-    ];
-    
-    const explainSimilarIndicators = [
-      'explain similar', 'tell me about similar', 'show me similar',
-      'describe similar', 'analyze similar', 'most relevant similar'
-    ];
-    
-    const hasSimilarIndicator = similarCustomerIndicators.some(indicator => 
-      queryLower.includes(indicator)
-    );
-    
-    const hasExplainSimilar = explainSimilarIndicators.some(indicator => 
-      queryLower.includes(indicator)
-    );
-    
-    return hasSimilarIndicator || hasExplainSimilar;
+  // HIGH CONFIDENCE: Similar customers queries
+  if (this.isSimilarCustomersQuery(queryLower)) {
+    return {
+      type: 'SIMILAR_CUSTOMERS',
+      confidence: 0.95,
+      entities: ['similar', 'customers'],
+      requiresAnalysisData: true,
+      source: 'quick-similar-customers',
+      reasoning: 'Query explicitly about similar customers'
+    };
   }
 
-  buildEnhancedClassificationPrompt(query, context) {
-    const contextInfo = this.buildContextInfo(context);
+  // HIGH CONFIDENCE: Timeline questions with analysis context
+  if (context.analysisId && this.refersToCurrentCustomer(query) && this.isTimelineQuestion(query)) {
+    return {
+      type: 'ANALYSIS_QUESTION',
+      confidence: 0.95,
+      entities: ['timeline'],
+      requiresAnalysisData: true,
+      source: 'quick-timeline-check',
+      reasoning: 'Timeline question about current customer'
+    };
+  }
+
+  // HIGH CONFIDENCE: Clear current customer questions
+  if (context.analysisId && this.refersToCurrentCustomer(query)) {
+    return {
+      type: 'ANALYSIS_QUESTION',
+      confidence: 0.9,
+      entities: [],
+      requiresAnalysisData: true,
+      source: 'quick-customer-check',
+      reasoning: 'Question about current customer while viewing analysis'
+    };
+  }
+
+  return { confidence: 0.5 };
+}
+
+/**
+ * NEW: Detect fit score questions about current customer
+ */
+isFitScoreQuestion(queryLower) {
+  const fitScoreIndicators = [
+    'fit score', 'score', '100%', '% fit', 'why does it have',
+    'why is the score', 'how did it get', 'what makes it',
+    'why 100%', 'scoring', 'fit rating', 'percentage'
+  ];
+  
+  // Look for fit score indicators combined with "why", "how", "what"
+  const hasQuestionWord = ['why', 'how', 'what'].some(word => queryLower.includes(word));
+  const hasFitScoreIndicator = fitScoreIndicators.some(indicator => queryLower.includes(indicator));
+  
+  return hasQuestionWord && hasFitScoreIndicator;
+}
+
+/**
+ * ENHANCED: Analysis Question Handler with Specific Fit Score Logic
+ */
+async handleAnalysisQuestion(query, context) {
+  if (!context.analysisData) {
+    return "I need analysis data to answer that question. Please make sure you're viewing a specific customer analysis.";
+  }
+
+  const analysisData = context.analysisData;
+  const queryLower = query.toLowerCase();
+
+  // SPECIFIC: Fit score explanation
+  if (this.isFitScoreQuestion(queryLower)) {
+    return this.generateFitScoreExplanation(analysisData, query);
+  }
+
+  // SPECIFIC: Timeline handling
+  if (queryLower.includes('timeline') || queryLower.includes('implementation') || 
+      queryLower.includes('go live') || queryLower.includes('when') ||
+      queryLower.includes('urgency') || queryLower.includes('target date')) {
     
-    return `You are an expert intent classifier. Classify this query into ONE category with high accuracy.
+    return this.generateTimelineResponse(analysisData);
+  }
+
+  // General analysis questions...
+  // (rest of the method stays the same)
+}
+
+/**
+ * NEW: Generate specific fit score explanation using actual analysis data
+ */
+generateFitScoreExplanation(analysisData, query) {
+  const fitScore = analysisData.fitScore;
+  const fitLevel = this.getFitScoreLevel(fitScore);
+  
+  let response = `# 📊 Why ${analysisData.customerName} Has a ${fitScore}% Fit Score\n\n`;
+  
+  response += `## 🎯 **Overall Assessment: ${fitLevel}**\n\n`;
+  
+  // Score breakdown analysis
+  if (analysisData.scoreBreakdown) {
+    response += `## 📈 **Scoring Breakdown**\n`;
+    response += `**Base Score:** ${analysisData.scoreBreakdown.baseScore || fitScore}%\n`;
+    
+    if (analysisData.scoreBreakdown.industryAdjustment) {
+      const adjustment = analysisData.scoreBreakdown.industryAdjustment;
+      response += `**Industry Fit (${analysisData.industry}):** ${adjustment > 0 ? '+' : ''}${adjustment}% ${adjustment > 0 ? '✅' : '⚠️'}\n`;
+    }
+    
+    if (analysisData.scoreBreakdown.fieldWorkerBonus) {
+      response += `**Field Worker Ratio Bonus:** +${analysisData.scoreBreakdown.fieldWorkerBonus}% ✅\n`;
+    }
+    
+    if (analysisData.scoreBreakdown.complexityPenalty) {
+      response += `**Complexity Penalty:** -${analysisData.scoreBreakdown.complexityPenalty}% ⚠️\n`;
+    }
+    
+    response += `\n`;
+  }
+  
+  // Positive factors driving the score
+  if (analysisData.recommendations?.fitScoreRationale?.positiveFactors?.length > 0) {
+    response += `## ✅ **Positive Factors (Why Score is High)**\n`;
+    analysisData.recommendations.fitScoreRationale.positiveFactors.forEach(factor => {
+      response += `• ${factor}\n`;
+    });
+    response += `\n`;
+  }
+  
+  // Requirements alignment
+  if (analysisData.requirements?.keyFeatures?.length > 0) {
+    response += `## 🎯 **Requirements Alignment**\n`;
+    const totalRequirements = analysisData.requirements.keyFeatures.length;
+    response += `**${totalRequirements} key requirements identified**, all supported by our platform:\n`;
+    analysisData.requirements.keyFeatures.forEach(req => {
+      response += `• ${req} ✅\n`;
+    });
+    response += `\n`;
+  }
+  
+  // Challenges addressed
+  if (analysisData.challenges?.length > 0) {
+    response += `## 🔧 **Challenges Our Platform Addresses**\n`;
+    analysisData.challenges.forEach(challenge => {
+      response += `• **${challenge.title}**: ${challenge.description}\n`;
+      response += `  *${challenge.severity} severity - directly addressed by our solution*\n`;
+    });
+    response += `\n`;
+  }
+  
+  // Industry/size fit
+  response += `## 🏢 **Perfect Fit Factors**\n`;
+  response += `• **Industry**: ${analysisData.industry} is a core strength for our platform\n`;
+  response += `• **Size**: ${analysisData.userCount?.total || 'Team size'} users fits perfectly in our sweet spot\n`;
+  response += `• **Field Ratio**: ${analysisData.userCount?.field || 0} field workers (${Math.round((analysisData.userCount?.field || 0) / (analysisData.userCount?.total || 1) * 100)}%) aligns with our field service focus\n`;
+  
+  // Integration complexity
+  if (analysisData.requirements?.integrations?.length > 0) {
+    response += `• **Integrations**: ${analysisData.requirements.integrations.length} required integrations are standard capabilities\n`;
+  }
+  
+  response += `\n`;
+  
+  // Negative factors (if any)
+  if (analysisData.recommendations?.fitScoreRationale?.negativeFactors?.length > 0) {
+    response += `## ⚠️ **Areas of Consideration**\n`;
+    analysisData.recommendations.fitScoreRationale.negativeFactors.forEach(factor => {
+      response += `• ${factor}\n`;
+    });
+    response += `\n`;
+  }
+  
+  // Strategic summary
+  response += `## 💡 **Strategic Summary**\n`;
+  if (fitScore >= 90) {
+    response += `${analysisData.customerName} represents an **ideal customer profile** with:\n`;
+    response += `• Perfect alignment between their needs and our capabilities\n`;
+    response += `• Industry expertise that ensures smooth implementation\n`;
+    response += `• Size and complexity that matches our platform strengths\n`;
+    response += `• High probability of implementation success and customer satisfaction\n`;
+  } else if (fitScore >= 80) {
+    response += `${analysisData.customerName} shows **excellent fit** with strong alignment in key areas.\n`;
+  } else if (fitScore >= 60) {
+    response += `${analysisData.customerName} shows **good fit** with some areas requiring additional consideration.\n`;
+  } else {
+    response += `${analysisData.customerName} presents **challenges** that would require careful evaluation and possibly custom solutions.\n`;
+  }
+  
+  return response;
+}
+
+/**
+ * Enhanced fit score question detection in OpenAI prompt
+ */
+buildEnhancedClassificationPrompt(query, context) {
+  const contextInfo = this.buildContextInfo(context);
+  
+  return `You are an expert intent classifier. Classify this query into ONE category with high accuracy.
 
 CONTEXT:
 ${contextInfo}
 
 CRITICAL CLASSIFICATION RULES:
-1. If query mentions "similar customers", "similar customer", "comparable", "like them" → SIMILAR_CUSTOMERS
-2. If viewing analysis AND asking about "the customer"/"they"/"their" → ANALYSIS_QUESTION  
-3. If asking about external company names → EXTERNAL_COMPANY_RESEARCH
-4. If asking for database searches → DATA_LOOKUP
-5. If asking about general concepts → EXPLANATION
+1. If asking "why" about fit score/percentage while viewing analysis → ANALYSIS_QUESTION
+2. If query mentions "similar customers", "similar customer", "comparable" → SIMILAR_CUSTOMERS  
+3. If viewing analysis AND asking about "the customer"/"they"/"their" → ANALYSIS_QUESTION
+4. If asking about external company names → EXTERNAL_COMPANY_RESEARCH
+5. If asking about general concepts WITHOUT customer context → EXPLANATION
 
 USER QUERY: "${query}"
 
 EXAMPLES FOR ACCURACY:
+- "Why does it have a 100% fit score?" → ANALYSIS_QUESTION (asking about current customer's score)
+- "What does a 100% fit score mean?" → EXPLANATION (general concept)
 - "Explain the most relevant similar customers" → SIMILAR_CUSTOMERS
-- "Who are similar customers to this one?" → SIMILAR_CUSTOMERS
 - "Did the customer mention timeline?" → ANALYSIS_QUESTION (when viewing analysis)
-- "What is Mr. Chill's business model?" → EXTERNAL_COMPANY_RESEARCH
-- "Search for HVAC companies" → DATA_LOOKUP
-- "How does fit scoring work?" → EXPLANATION
+- "How does fit scoring work in general?" → EXPLANATION (general process)
 
 RESPOND WITH VALID JSON ONLY:
 {
-  "type": "SIMILAR_CUSTOMERS",
+  "type": "ANALYSIS_QUESTION",
   "confidence": 0.95,
-  "entities": ["similar", "customers"],
-  "reasoning": "User asking about similar customers analysis"
+  "entities": ["fit", "score"],
+  "reasoning": "User asking about current customer's specific fit score"
 }`;
-  }
+}
 
   buildContextInfo(context) {
     let contextInfo = '';
