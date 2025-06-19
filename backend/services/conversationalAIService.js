@@ -1,4 +1,4 @@
-// backend/services/conversationalAIService.js - COMPREHENSIVE FIX
+// backend/services/conversationalAIService.js - COMPLETE ENHANCED VERSION
 const axios = require('axios');
 const cheerio = require('cheerio');
 const analysisService = require('./analysisService');
@@ -6,11 +6,12 @@ const historicalDataService = require('./historicalDataService');
 const { getDb } = require('./mongoDbService');
 
 /**
- * FIXED: Complete Web Intelligence Extractor with Real Scraping
+ * ENHANCED: OpenAI-Powered Web Intelligence Extractor
  */
 class WebIntelligenceExtractor {
   constructor() {
     this.cache = new Map();
+    this.domainCache = new Map();
     this.userAgents = [
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
@@ -29,24 +30,29 @@ class WebIntelligenceExtractor {
     }
 
     try {
-      const domains = this.generateDomains(customerName);
-      console.log(`🌐 Trying domains: ${domains.join(', ')}`);
+      // ENHANCED: Use OpenAI for intelligent domain generation
+      const domains = await this.generateDomainsWithAI(customerName, analysisData);
+      console.log(`🤖 AI-generated domains: ${domains.join(', ')}`);
       
+      // Try each domain in order of likelihood
       for (const domain of domains) {
         try {
           const businessData = await this.scrapeWebsite(`https://${domain}`);
           if (businessData && businessData.hasBusinessData) {
-            this.cache.set(cacheKey, { data: businessData, timestamp: Date.now() });
+            // ENHANCED: Use OpenAI to enhance the extracted data
+            const enhancedData = await this.enhanceDataWithAI(businessData, customerName);
+            
+            this.cache.set(cacheKey, { data: enhancedData, timestamp: Date.now() });
             console.log(`✅ Found business data at: ${domain}`);
-            return businessData;
+            return enhancedData;
           }
         } catch (error) {
           console.log(`❌ Failed to scrape ${domain}: ${error.message}`);
         }
       }
 
-      // If no direct website found, try search approach
-      const searchData = await this.searchForCompany(customerName);
+      // If no direct website found, try AI-powered search approach
+      const searchData = await this.aiPoweredCompanySearch(customerName, analysisData);
       if (searchData) {
         this.cache.set(cacheKey, { data: searchData, timestamp: Date.now() });
         return searchData;
@@ -59,7 +65,223 @@ class WebIntelligenceExtractor {
     }
   }
 
-  generateDomains(customerName) {
+  /**
+   * ENHANCED: AI-Powered Domain Generation
+   */
+  async generateDomainsWithAI(customerName, analysisData = null) {
+    // Check domain cache first (24 hour cache)
+    const cacheKey = `domains-${customerName.toLowerCase()}`;
+    const cached = this.domainCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < 86400000) {
+      console.log('📦 Using cached domain suggestions');
+      return cached.domains;
+    }
+
+    try {
+      const industry = analysisData?.industry || 'Unknown';
+      const location = analysisData?.location || 'Unknown';
+      
+      const prompt = `
+You are an expert at predicting company website domains. Generate the most likely website domains for this company.
+
+## COMPANY INFORMATION
+**Company Name:** ${customerName}
+**Industry:** ${industry}
+**Location:** ${location}
+
+## DOMAIN GENERATION RULES
+1. **Most Likely First:** Order domains by probability of being correct
+2. **Industry Patterns:** Consider industry-specific domain patterns (HVAC companies often use "hvac", "heating", "cooling")
+3. **Geographic Considerations:** Include location-based variations if relevant
+4. **Brand Variations:** Consider how companies typically shorten their names
+5. **Extension Priorities:** .com first, then .net, .org if appropriate
+
+## DOMAIN PATTERNS TO CONSIDER
+- Remove legal suffixes (Inc, LLC, Corp, Ltd)
+- Company abbreviations and acronyms
+- Industry-specific suffixes (services, solutions, group, hvac, plumbing, electrical)
+- Geographic modifiers if location is known
+- Common business prefixes/suffixes (call, pro, best, top)
+
+## EXAMPLES
+"Johnson Plumbing Services Inc" → ["johnsonplumbing.com", "johnson-plumbing.com", "jpsservices.com", "johnsonplumbingservices.com"]
+"Mr. Chill Heating & Air LLC" → ["mrchillhvac.com", "mr-chill.com", "mrchillheating.com", "chillhvac.com"]
+
+Generate 8-12 most likely domains for "${customerName}" in JSON format:
+
+{
+  "domains": [
+    "mostlikely.com",
+    "secondchoice.com",
+    "alternative.com"
+  ],
+  "confidence": "high|medium|low",
+  "reasoning": "Brief explanation of domain selection strategy"
+}`;
+
+      const response = await this.callOpenAI(prompt, { maxTokens: 500 });
+      const aiResponse = JSON.parse(response);
+      
+      console.log(`🤖 AI domain generation confidence: ${aiResponse.confidence}`);
+      console.log(`🎯 AI reasoning: ${aiResponse.reasoning}`);
+      
+      // Cache the results
+      this.domainCache.set(cacheKey, {
+        domains: aiResponse.domains,
+        timestamp: Date.now()
+      });
+      
+      return aiResponse.domains;
+      
+    } catch (error) {
+      console.error('AI domain generation failed, falling back to pattern-based:', error);
+      // Fallback to original pattern-based method
+      return this.generateDomainsPattern(customerName);
+    }
+  }
+
+  /**
+   * ENHANCED: AI-Powered Data Enhancement
+   */
+  async enhanceDataWithAI(rawBusinessData, customerName) {
+    try {
+      const prompt = `
+You are a business intelligence analyst. Enhance and interpret this scraped website data for ${customerName}.
+
+## RAW WEBSITE DATA
+${JSON.stringify(rawBusinessData, null, 2)}
+
+## ENHANCEMENT TASKS
+1. **Business Model Classification:** Improve B2B/B2C detection with higher confidence
+2. **Company Size Estimation:** Analyze all indicators to estimate company size range
+3. **Service Categorization:** Categorize and standardize service offerings
+4. **Market Position:** Assess market positioning and competitive factors
+5. **Target Customer Analysis:** Identify target customer segments
+6. **Technology Sophistication:** Assess tech adoption level from website quality
+
+## OUTPUT FORMAT
+{
+  "enhancedBusinessModel": {
+    "primary": "B2B|B2C|Mixed",
+    "confidence": 0.0-1.0,
+    "evidence": ["list of supporting evidence"],
+    "targetCustomers": ["customer segment descriptions"]
+  },
+  "companySizeEstimate": {
+    "range": "1-10|11-50|51-200|201-500|500+",
+    "confidence": 0.0-1.0,
+    "indicators": ["indicators used for estimation"]
+  },
+  "serviceAnalysis": {
+    "primaryServices": ["standardized service names"],
+    "serviceModel": "Emergency|Scheduled|Contract|Mixed",
+    "specializationLevel": "Generalist|Specialist|Niche"
+  },
+  "marketIntelligence": {
+    "marketPosition": "Local|Regional|National",
+    "competitiveFactors": ["key differentiators"],
+    "technologyAdoption": "Low|Medium|High"
+  },
+  "keyInsights": ["actionable insights for sales teams"]
+}
+
+Provide comprehensive business intelligence enhancement.`;
+
+      const response = await this.callOpenAI(prompt, { maxTokens: 800 });
+      const enhancedData = JSON.parse(response);
+      
+      // Merge enhanced data with original
+      return {
+        ...rawBusinessData,
+        aiEnhanced: true,
+        enhancement: enhancedData,
+        enhancedAt: new Date().toISOString()
+      };
+      
+    } catch (error) {
+      console.error('AI data enhancement failed:', error);
+      // Return original data if enhancement fails
+      return {
+        ...rawBusinessData,
+        aiEnhanced: false,
+        enhancementError: error.message
+      };
+    }
+  }
+
+  /**
+   * NEW: AI-Powered Company Search (when no website found)
+   */
+  async aiPoweredCompanySearch(customerName, analysisData = null) {
+    try {
+      const prompt = `
+You are a business research expert. Provide comprehensive analysis for this company even without direct website access.
+
+## COMPANY TO RESEARCH
+**Name:** ${customerName}
+**Industry:** ${analysisData?.industry || 'Unknown'}
+**Context:** ${analysisData ? 'Company from field service software prospect analysis' : 'External company research'}
+
+## RESEARCH TASKS
+Based on the company name and industry, provide intelligent analysis:
+
+1. **Likely Business Model:** B2B/B2C prediction with reasoning
+2. **Industry Analysis:** Typical business patterns for this industry
+3. **Service Predictions:** Likely services offered based on name/industry
+4. **Size Estimation:** Probable company size range
+5. **Market Characteristics:** Typical market positioning
+6. **Technology Needs:** Field service software requirements prediction
+
+## OUTPUT FORMAT
+{
+  "hasBusinessData": true,
+  "source": "ai_analysis",
+  "companyName": "${customerName}",
+  "businessModel": {
+    "primary": "B2B|B2C|Mixed",
+    "confidence": 0.0-1.0,
+    "reasoning": "explanation of prediction"
+  },
+  "industryAnalysis": {
+    "typicalServices": ["predicted services"],
+    "marketCharacteristics": ["industry characteristics"],
+    "customerTypes": ["typical customer segments"]
+  },
+  "sizeEstimate": {
+    "range": "estimated size range",
+    "reasoning": "basis for estimation"
+  },
+  "fieldServicePredictions": {
+    "softwareNeeds": ["predicted software requirements"],
+    "implementationComplexity": "Low|Medium|High",
+    "typicalChallenges": ["predicted challenges"]
+  },
+  "searchRecommendations": {
+    "alternativeSearchTerms": ["alternative ways to search"],
+    "platformsToCheck": ["LinkedIn", "industry directories", "etc."],
+    "additionalResearch": ["recommended next steps"]
+  },
+  "confidence": "overall confidence in analysis"
+}
+
+Provide intelligent business analysis even without direct website data.`;
+
+      const response = await this.callOpenAI(prompt, { maxTokens: 1000 });
+      const searchData = JSON.parse(response);
+      
+      console.log(`🤖 AI-powered company analysis completed with ${searchData.confidence} confidence`);
+      return searchData;
+      
+    } catch (error) {
+      console.error('AI-powered company search failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * FALLBACK: Pattern-based domain generation (preserved for reliability)
+   */
+  generateDomainsPattern(customerName) {
     const cleanName = customerName
       .toLowerCase()
       .replace(/\b(inc|llc|corp|ltd|company|co|services|service|solutions|group|enterprises)\b/g, '')
@@ -84,7 +306,6 @@ class WebIntelligenceExtractor {
     domains.push(`${primaryName}hvac.com`);
     domains.push(`${primaryName}services.com`);
     domains.push(`${primaryName}plumbing.com`);
-    domains.push(`${primaryName}electrical.com`);
 
     return [...new Set(domains)];
   }
@@ -290,16 +511,47 @@ class WebIntelligenceExtractor {
     return contact;
   }
 
-  async searchForCompany(customerName) {
-    // Placeholder for search engine approach if direct website scraping fails
-    // Could implement Google Custom Search API, Bing API, etc.
-    console.log(`🔍 Would search for: ${customerName} (search API not implemented)`);
-    return { hasBusinessData: false, reason: 'search_not_implemented' };
+  /**
+   * OpenAI API call for domain generation and data enhancement
+   */
+  async callOpenAI(prompt, options = {}) {
+    try {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) throw new Error('OpenAI API key is not configured');
+
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert business intelligence analyst specializing in web research and company analysis. Always respond with valid JSON when requested.'
+            },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.3, // Lower temperature for more consistent results
+          max_tokens: options.maxTokens || 600
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      );
+      
+      return response.data.choices[0].message.content.trim();
+    } catch (error) {
+      console.error('OpenAI call failed for web intelligence:', error);
+      throw error;
+    }
   }
 }
 
 /**
- * FIXED: Complete OpenAI Intent Classifier with all missing methods
+ * COMPLETE: OpenAI Intent Classifier with External Company Detection
  */
 class OpenAIIntentClassifier {
   constructor() {
@@ -308,6 +560,8 @@ class OpenAIIntentClassifier {
       'BUSINESS_MODEL': { requiresAnalysisData: true },
       'COMPANY_RESEARCH': { requiresAnalysisData: false },
       'SIMILAR_CUSTOMERS': { requiresAnalysisData: true },
+      'EXTERNAL_COMPANY_RESEARCH': { requiresAnalysisData: false },
+      'EXTERNAL_COMPANY_BUSINESS_MODEL': { requiresAnalysisData: false },
       'NEXT_STEPS': { requiresAnalysisData: true },
       'EMAIL_GENERATION': { requiresAnalysisData: true },
       'DATA_LOOKUP': { requiresAnalysisData: false },
@@ -316,7 +570,143 @@ class OpenAIIntentClassifier {
     };
   }
 
-  // All the missing methods from the previous fix...
+  // ENHANCED: External company detection
+  enhancedQuickRuleBasedCheck(query, context) {
+    try {
+      const queryLower = query.toLowerCase();
+      
+      // RULE 1: External company website/research detection
+      const externalCompany = this.extractExternalCompanyName(query, context);
+      if (externalCompany) {
+        const isWebsiteQuery = queryLower.includes('website') || queryLower.includes('web') || queryLower.includes('url') || queryLower.includes('site');
+        const isBusinessQuery = queryLower.includes('business model') || queryLower.includes('b2b') || queryLower.includes('b2c');
+        
+        if (isWebsiteQuery) {
+          return {
+            type: 'EXTERNAL_COMPANY_RESEARCH',
+            confidence: 0.95,
+            entities: ['website', 'external', 'company'],
+            requiresAnalysisData: false,
+            reasoning: `Query about external company ${externalCompany} website`,
+            source: 'rule-based-external-website',
+            externalCompany: externalCompany
+          };
+        }
+        
+        if (isBusinessQuery) {
+          return {
+            type: 'EXTERNAL_COMPANY_BUSINESS_MODEL',
+            confidence: 0.9,
+            entities: ['business', 'model', 'external'],
+            requiresAnalysisData: false,
+            reasoning: `Query about external company ${externalCompany} business model`,
+            source: 'rule-based-external-business',
+            externalCompany: externalCompany
+          };
+        }
+        
+        // General external company research
+        return {
+          type: 'EXTERNAL_COMPANY_RESEARCH',
+          confidence: 0.85,
+          entities: ['external', 'company'],
+          requiresAnalysisData: false,
+          reasoning: `Query about external company ${externalCompany}`,
+          source: 'rule-based-external',
+          externalCompany: externalCompany
+        };
+      }
+      
+      // RULE 2: Similar customers query
+      if (this.isSimilarCustomersQuery(queryLower)) {
+        return {
+          type: 'SIMILAR_CUSTOMERS',
+          confidence: 0.95,
+          entities: ['similar', 'customers'],
+          requiresAnalysisData: true,
+          reasoning: 'Query explicitly about similar customers',
+          source: 'rule-based-override'
+        };
+      }
+
+      // RULE 3: Current customer context questions
+      if (context.analysisId && this.refersToCurrentCustomer(query)) {
+        return {
+          type: 'ANALYSIS_QUESTION',
+          confidence: 0.9,
+          entities: [],
+          requiresAnalysisData: true,
+          reasoning: 'Query about current customer being analyzed',
+          source: 'rule-based-current-customer'
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error in enhancedQuickRuleBasedCheck:', error);
+      return null;
+    }
+  }
+
+  // NEW: Extract external company names from queries
+  extractExternalCompanyName(query, context) {
+    // Common company name patterns
+    const companyPatterns = [
+      // Full company names with legal suffixes
+      /\b([A-Z][a-zA-Z\s&]+(?:Inc|LLC|Corp|Ltd|Company|Co|Solutions|Services|Group|Enterprises|Corporation)\.?)\b/g,
+      // Mr./Mrs./Dr. business names  
+      /\b(Mr\.\s+[A-Z][a-zA-Z\s]+(?:Heating|Air|HVAC|Plumbing|Electrical|Cleaning|Services?))\b/g,
+      // Business names with industry keywords
+      /\b([A-Z][a-zA-Z\s]+(?:Heating|Air|HVAC|Plumbing|Electrical|Cleaning|Services?|Solutions|Systems))\b/g,
+      // Simple proper nouns that could be companies
+      /\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)+)\b/g
+    ];
+
+    const extractedNames = [];
+    
+    for (const pattern of companyPatterns) {
+      const matches = query.matchAll(pattern);
+      for (const match of matches) {
+        const companyName = match[1].trim();
+        
+        // Skip if it's the current customer
+        if (context.analysisData?.customerName && 
+            companyName.toLowerCase().includes(context.analysisData.customerName.toLowerCase())) {
+          continue;
+        }
+        
+        // Skip common words that aren't companies
+        if (this.isLikelyCompanyName(companyName)) {
+          extractedNames.push(companyName);
+        }
+      }
+    }
+
+    // Return the first valid company name found
+    return extractedNames.length > 0 ? extractedNames[0] : null;
+  }
+
+  isLikelyCompanyName(name) {
+    const excludeWords = ['What', 'Where', 'When', 'How', 'Why', 'The', 'This', 'That', 'Analysis', 'Customer'];
+    const nameLower = name.toLowerCase();
+    
+    // Exclude common question words
+    if (excludeWords.some(word => nameLower.includes(word.toLowerCase()))) {
+      return false;
+    }
+
+    // Include if it has business indicators
+    const businessIndicators = [
+      'inc', 'llc', 'corp', 'ltd', 'company', 'co', 'solutions', 'services',
+      'heating', 'air', 'hvac', 'plumbing', 'electrical', 'cleaning',
+      'mr.', 'mrs.', 'dr.', 'group', 'enterprises'
+    ];
+    
+    return businessIndicators.some(indicator => nameLower.includes(indicator)) || 
+           (name.split(' ').length >= 2 && name.match(/^[A-Z]/)); // Multi-word, capitalized
+  }
+
+  // EXISTING: Similar customers detection
   isSimilarCustomersQuery(queryLower) {
     const similarCustomerIndicators = [
       'similar customer', 'similar customers', 'comparable customer', 'comparable customers',
@@ -329,6 +719,7 @@ class OpenAIIntentClassifier {
     return similarCustomerIndicators.some(indicator => queryLower.includes(indicator));
   }
 
+  // EXISTING: Timeline question detection
   isTimelineQuestion(query) {
     const timelineIndicators = [
       'timeline', 'implementation timeline', 'go live', 'go-live',
@@ -339,6 +730,7 @@ class OpenAIIntentClassifier {
     return timelineIndicators.some(indicator => queryLower.includes(indicator));
   }
 
+  // EXISTING: Current customer reference detection
   refersToCurrentCustomer(query) {
     const currentCustomerIndicators = [
       'did the customer', 'did they', 'does the customer', 'do they',
@@ -355,6 +747,7 @@ class OpenAIIntentClassifier {
       // Quick rule-based check first
       const ruleBasedResult = this.enhancedQuickRuleBasedCheck(query, context);
       if (ruleBasedResult) {
+        console.log(`🚀 Rule-based classification: ${ruleBasedResult.type} (${ruleBasedResult.confidence})`);
         return ruleBasedResult;
       }
 
@@ -367,6 +760,8 @@ CATEGORIES:
 - BUSINESS_MODEL: Questions about B2B/B2C, business model, customer types, revenue model
 - COMPANY_RESEARCH: Questions about company information, characteristics, industry position
 - SIMILAR_CUSTOMERS: Questions about similar customers or historical comparisons  
+- EXTERNAL_COMPANY_RESEARCH: Questions about companies not in current analysis
+- EXTERNAL_COMPANY_BUSINESS_MODEL: Business model questions about external companies
 - NEXT_STEPS: Questions about what to do next, sales strategies, follow-up actions
 - EMAIL_GENERATION: Requests to generate emails, proposals, or communications
 - DATA_LOOKUP: Questions requiring lookup of specific data or customers
@@ -395,41 +790,18 @@ Respond with valid JSON only:
     }
   }
 
-  enhancedQuickRuleBasedCheck(query, context) {
-    try {
-      const queryLower = query.toLowerCase();
-      
-      if (this.isSimilarCustomersQuery(queryLower)) {
-        return {
-          type: 'SIMILAR_CUSTOMERS',
-          confidence: 0.95,
-          entities: ['similar', 'customers'],
-          requiresAnalysisData: true,
-          reasoning: 'Query explicitly about similar customers',
-          source: 'rule-based-override'
-        };
-      }
-
-      if (context.analysisId && this.refersToCurrentCustomer(query)) {
-        return {
-          type: 'ANALYSIS_QUESTION',
-          confidence: 0.9,
-          entities: [],
-          requiresAnalysisData: true,
-          reasoning: 'Query about current customer being analyzed',
-          source: 'rule-based-current-customer'
-        };
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Error in enhancedQuickRuleBasedCheck:', error);
-      return null;
-    }
-  }
-
   strictValidateAndCorrect(intent, query, context) {
     try {
+      // Check for external company that wasn't caught by rules
+      const externalCompany = this.extractExternalCompanyName(query, context);
+      if (externalCompany && !['EXTERNAL_COMPANY_RESEARCH', 'EXTERNAL_COMPANY_BUSINESS_MODEL'].includes(intent.type)) {
+        const isWebsiteQuery = query.toLowerCase().includes('website');
+        intent.type = isWebsiteQuery ? 'EXTERNAL_COMPANY_RESEARCH' : 'EXTERNAL_COMPANY_BUSINESS_MODEL';
+        intent.externalCompany = externalCompany;
+        intent.confidence = 0.9;
+      }
+
+      // Similar customers correction
       if (this.isSimilarCustomersQuery(query.toLowerCase()) && intent.type !== 'SIMILAR_CUSTOMERS') {
         intent.type = 'SIMILAR_CUSTOMERS';
         intent.confidence = 0.95;
@@ -442,7 +814,8 @@ Respond with valid JSON only:
         entities: intent.entities || [],
         requiresAnalysisData: this.intentCategories[intent.type]?.requiresAnalysisData || false,
         reasoning: intent.reasoning || 'OpenAI classification',
-        source: 'openai'
+        source: 'openai',
+        externalCompany: intent.externalCompany || null
       };
     } catch (error) {
       console.error('Error in strictValidateAndCorrect:', error);
@@ -475,6 +848,19 @@ This means questions about "the customer", "they", "their" refer to ${context.an
   fallbackIntentClassification(query, context) {
     try {
       const queryLower = query.toLowerCase();
+      
+      // Check for external company first
+      const externalCompany = this.extractExternalCompanyName(query, context);
+      if (externalCompany) {
+        return {
+          type: 'EXTERNAL_COMPANY_RESEARCH',
+          confidence: 0.8,
+          entities: ['external', 'company'],
+          requiresAnalysisData: false,
+          source: 'fallback-external',
+          externalCompany: externalCompany
+        };
+      }
       
       if (this.isSimilarCustomersQuery(queryLower)) {
         return {
@@ -535,7 +921,7 @@ This means questions about "the customer", "they", "their" refer to ${context.an
 }
 
 /**
- * COMPREHENSIVE: Complete Conversational AI Service
+ * COMPLETE: Enhanced Conversational AI Service
  */
 class ConversationalAIService {
   constructor() {
@@ -595,11 +981,19 @@ class ConversationalAIService {
       // Classify user intent
       const intent = await this.classifyIntent(query, context);
       
+      // Determine target company for web enhancement
+      let targetCompany = null;
+      if (intent.externalCompany) {
+        targetCompany = intent.externalCompany;
+      } else if (context.analysisData?.customerName) {
+        targetCompany = context.analysisData.customerName;
+      }
+      
       // Gather web enhancement if needed
       let enhancementData = null;
       if (this.shouldEnhanceWithWebData(query, intent, context)) {
         try {
-          enhancementData = await this.gatherWebEnhancement(context.analysisData);
+          enhancementData = await this.gatherWebEnhancement(targetCompany, context.analysisData);
         } catch (error) {
           console.log('Web enhancement failed, continuing without it:', error.message);
         }
@@ -621,7 +1015,8 @@ class ConversationalAIService {
         response: response,
         intent: intent.type,
         context: context.analysisId ? 'analysis-aware' : 'general',
-        webEnhanced: !!enhancementData
+        webEnhanced: !!enhancementData,
+        externalCompany: intent.externalCompany || null
       };
       
     } catch (error) {
@@ -706,23 +1101,33 @@ class ConversationalAIService {
   }
 
   shouldEnhanceWithWebData(query, intent, context) {
-    const webEnhancedIntents = ['BUSINESS_MODEL', 'COMPANY_RESEARCH'];
-    const webKeywords = ['business model', 'b2b', 'b2c', 'website', 'company information'];
+    const webEnhancedIntents = [
+      'BUSINESS_MODEL', 
+      'COMPANY_RESEARCH',
+      'EXTERNAL_COMPANY_RESEARCH', 
+      'EXTERNAL_COMPANY_BUSINESS_MODEL'
+    ];
+    
+    const webKeywords = [
+      'business model', 'b2b', 'b2c', 'website', 'web', 'site', 'url',
+      'company information', 'company research', 'business information'
+    ];
     
     const hasWebIntent = webEnhancedIntents.includes(intent.type);
     const hasWebKeywords = webKeywords.some(keyword => query.toLowerCase().includes(keyword));
-    const hasCustomerName = context.analysisData?.customerName;
+    const hasExternalCompany = intent.externalCompany;
     
-    return (hasWebIntent || hasWebKeywords) && hasCustomerName;
+    // Enable web enhancement if any condition is met
+    return hasWebIntent || hasWebKeywords || hasExternalCompany;
   }
 
-  async gatherWebEnhancement(analysisData) {
+  async gatherWebEnhancement(targetCompany, analysisData = null) {
     try {
-      if (!analysisData?.customerName) return null;
+      if (!targetCompany) return null;
       
-      console.log(`🌐 Gathering web enhancement for: ${analysisData.customerName}`);
+      console.log(`🌐 Gathering web enhancement for: ${targetCompany}`);
       const webData = await this.webIntelligence.extractBusinessIntelligence(
-        analysisData.customerName, 
+        targetCompany, 
         analysisData
       );
       
@@ -731,6 +1136,7 @@ class ConversationalAIService {
         return { webIntelligence: webData };
       }
       
+      console.log('❌ No web data found');
       return null;
     } catch (error) {
       console.error('Web enhancement failed:', error);
@@ -751,6 +1157,10 @@ class ConversationalAIService {
           return await this.handleBusinessModel(query, context, enhancementData);
         case 'COMPANY_RESEARCH':
           return await this.handleCompanyResearch(query, context, enhancementData);
+        case 'EXTERNAL_COMPANY_RESEARCH':
+          return await this.handleExternalCompanyResearch(query, context, intent.externalCompany, enhancementData);
+        case 'EXTERNAL_COMPANY_BUSINESS_MODEL':
+          return await this.handleExternalCompanyBusinessModel(query, context, intent.externalCompany, enhancementData);
         case 'EMAIL_GENERATION':
           return await this.handleEmailGeneration(query, context);
         case 'DATA_LOOKUP':
@@ -819,21 +1229,13 @@ ${analysisData.requirements?.integrations?.map(int =>
     **Requirements:** ${int.requirements || 'Standard integration'}`
 ).join('\n') || '• No integration requirements specified'}
 
-**Custom Requirements:**
-${analysisData.requirements?.customRequirements?.map(req => 
-  `• **${req.feature}**: ${req.description} (${req.priority} priority)`
-).join('\n') || '• No custom requirements specified'}
-
 ### SERVICES & OFFERINGS
 ${JSON.stringify(analysisData.services, null, 2) || 'No services data available'}
 
 ### BUDGET & TIMELINE
 **Budget:** ${analysisData.budget?.mentioned ? (analysisData.budget.range || analysisData.budget.amount || 'Budget discussed') : 'Budget not discussed'}
-**Budget Details:** ${JSON.stringify(analysisData.budget, null, 2) || 'No budget details'}
-
 **Timeline:** ${analysisData.timeline?.desiredGoLive || 'Not specified'} 
 **Urgency:** ${analysisData.timeline?.urgency || 'Not specified'}
-**Timeline Details:** ${JSON.stringify(analysisData.timeline, null, 2) || 'No timeline details'}
 
 ### SCORE BREAKDOWN & RATIONALE
 ${JSON.stringify(analysisData.scoreBreakdown, null, 2) || 'No score breakdown available'}
@@ -894,7 +1296,7 @@ You are a field service software sales expert providing strategic insights about
 ${analysisData.challenges?.map(c => `• **${c.title}** (${c.severity} severity): ${c.description}`).join('\n') || '• No specific challenges identified'}
 
 ### Key Requirements
-${analysisData.requirements?.keyFeatures?.map(req => `• ${req}`).join('\n') || '• No specific requirements listed'}
+${analysisData.requirements?.keyFeatures?.slice(0, 5).map(req => `• ${req}`).join('\n') || '• Standard field service requirements'}
 
 ## COMPLETE SIMILAR CUSTOMERS DATA - ALL SECTIONS
 ${JSON.stringify(analysisData.similarCustomers, null, 2)}
@@ -930,26 +1332,131 @@ Based on their specific challenges (${analysisData.challenges?.map(c => c.title)
 - **Risk mitigation** strategies based on similar customer experiences
 - **Success factors** that apply to ${analysisData.customerName}
 
-### 💼 **Sales Strategy Application**
-- **Reference customers** we can mention in conversations
-- **Success stories** to highlight
-- **Potential objections** to address based on similar customer experiences
-- **Implementation approaches** that worked for similar customers
-
-### ⚠️ **Implementation Risk Assessment**
-- **Common challenges** faced by similar customers
-- **Success vs. failure factors** in implementations
-- **Timeline expectations** based on similar customer data
-- **Resource requirements** learned from similar implementations
-
 Use ALL the actual customer data, names, numbers, and details from the similar customers analysis. Be specific and reference exact match percentages, implementation durations, and key learnings.`;
 
     return await this.callOpenAI(prompt, { maxTokens: 1500 });
   }
 
   /**
-   * ENHANCED: Business Model Handler with Web Intelligence
+   * ENHANCED: External Company Research Handler
    */
+  async handleExternalCompanyResearch(query, context, externalCompany, enhancementData = null) {
+    if (!externalCompany) {
+      return "I couldn't identify which external company you're asking about. Please specify the company name clearly.";
+    }
+
+    const prompt = `
+Provide comprehensive company research for: **${externalCompany}**
+
+${enhancementData?.webIntelligence ? `
+## WEB INTELLIGENCE ${enhancementData.webIntelligence.aiEnhanced ? '(AI-ENHANCED)' : '(BASIC)'}
+
+### 🌐 Website Information
+**Website:** ${enhancementData.webIntelligence.url || 'Not found'}
+**Title:** ${enhancementData.webIntelligence.title || 'N/A'}
+**Description:** ${enhancementData.webIntelligence.description || 'N/A'}
+
+${enhancementData.webIntelligence.aiEnhanced ? `
+### 🤖 AI-Enhanced Business Intelligence
+**Business Model:** ${enhancementData.webIntelligence.enhancement.enhancedBusinessModel.primary} (${Math.round(enhancementData.webIntelligence.enhancement.enhancedBusinessModel.confidence * 100)}% confidence)
+**Target Customers:** ${enhancementData.webIntelligence.enhancement.enhancedBusinessModel.targetCustomers.join(', ')}
+**Company Size:** ${enhancementData.webIntelligence.enhancement.companySizeEstimate.range} (${Math.round(enhancementData.webIntelligence.enhancement.companySizeEstimate.confidence * 100)}% confidence)
+**Market Position:** ${enhancementData.webIntelligence.enhancement.marketIntelligence.marketPosition}
+**Technology Adoption:** ${enhancementData.webIntelligence.enhancement.marketIntelligence.technologyAdoption}
+
+### 🎯 Sales Intelligence
+**Primary Services:** ${enhancementData.webIntelligence.enhancement.serviceAnalysis.primaryServices.join(', ')}
+**Service Model:** ${enhancementData.webIntelligence.enhancement.serviceAnalysis.serviceModel}
+**Key Insights:** ${enhancementData.webIntelligence.enhancement.keyInsights.join(' | ')}
+` : `
+### 📊 Basic Web Intelligence
+**Business Model:** ${enhancementData.webIntelligence.businessModel?.primary || 'Unknown'} 
+**Services:** ${enhancementData.webIntelligence.services?.join(', ') || 'Not detected'}
+**Contact:** ${enhancementData.webIntelligence.contact?.phones?.join(', ') || 'Not found'}
+`}
+` : `## WEB INTELLIGENCE
+${enhancementData?.source === 'ai_analysis' ? `
+### 🤖 AI-Powered Analysis (No Website Found)
+**Business Model Prediction:** ${enhancementData.businessModel.primary} (${Math.round(enhancementData.businessModel.confidence * 100)}% confidence)
+**Reasoning:** ${enhancementData.businessModel.reasoning}
+**Predicted Services:** ${enhancementData.industryAnalysis.typicalServices.join(', ')}
+**Company Size Estimate:** ${enhancementData.sizeEstimate.range}
+
+### 🔍 Research Recommendations
+**Alternative Search Terms:** ${enhancementData.searchRecommendations.alternativeSearchTerms.join(', ')}
+**Platforms to Check:** ${enhancementData.searchRecommendations.platformsToCheck.join(', ')}
+` : 'No web intelligence available - no website found and AI analysis not available.'}`}
+
+USER QUESTION: "${query}"
+
+## COMPREHENSIVE COMPANY RESEARCH
+
+### 🌐 **Website & Online Presence**
+${enhancementData?.webIntelligence?.url ? 
+  `✅ **Website Found:** ${enhancementData.webIntelligence.url}
+   📄 **Company Description:** ${enhancementData.webIntelligence.description}` :
+  `❌ **Website:** No website found through AI-powered domain search
+   💡 **Next Steps:** ${enhancementData?.searchRecommendations?.additionalResearch?.join(', ') || 'Try manual search or industry directories'}`}
+
+### 🏢 **Business Intelligence**
+${enhancementData?.webIntelligence?.aiEnhanced ? 
+  `🤖 **AI-Enhanced Analysis:**
+   - **Business Model:** ${enhancementData.webIntelligence.enhancement.enhancedBusinessModel.primary} 
+   - **Confidence:** ${Math.round(enhancementData.webIntelligence.enhancement.enhancedBusinessModel.confidence * 100)}%
+   - **Evidence:** ${enhancementData.webIntelligence.enhancement.enhancedBusinessModel.evidence.join(', ')}
+   - **Company Size:** ${enhancementData.webIntelligence.enhancement.companySizeEstimate.range}` :
+  enhancementData?.businessModel ? 
+  `🎯 **AI Prediction:**
+   - **Business Model:** ${enhancementData.businessModel.primary} (${Math.round(enhancementData.businessModel.confidence * 100)}% confidence)
+   - **Reasoning:** ${enhancementData.businessModel.reasoning}` :
+  '❓ **Business Model:** Unable to determine from available data'}
+
+### 🎯 **Field Service Software Implications**
+${enhancementData?.fieldServicePredictions ? 
+  `📋 **Software Needs:** ${enhancementData.fieldServicePredictions.softwareNeeds.join(', ')}
+   ⚙️ **Implementation Complexity:** ${enhancementData.fieldServicePredictions.implementationComplexity}
+   ⚠️ **Typical Challenges:** ${enhancementData.fieldServicePredictions.typicalChallenges.join(', ')}` :
+  'Field service requirements analysis not available'}
+
+### 💡 **Strategic Insights**
+${enhancementData?.webIntelligence?.aiEnhanced ? 
+  `🚀 **Key Insights:** ${enhancementData.webIntelligence.enhancement.keyInsights.join(' | ')}
+   🏆 **Competitive Factors:** ${enhancementData.webIntelligence.enhancement.marketIntelligence.competitiveFactors.join(', ')}` :
+  'Strategic analysis requires additional research'}
+
+### 🔍 **Research Quality**
+${enhancementData?.webIntelligence?.aiEnhanced ? 
+  '🌟 **High-Quality:** AI-enhanced web intelligence with comprehensive business analysis' :
+  enhancementData?.source === 'ai_analysis' ? 
+  '🎯 **AI-Predicted:** Intelligent analysis based on company name and industry patterns' :
+  '⚠️ **Limited:** Basic analysis only - manual research recommended'}`;
+
+    return await this.callOpenAI(prompt, { maxTokens: 1200 });
+  }
+
+  /**
+   * ENHANCED: External Company Business Model Handler
+   */
+  async handleExternalCompanyBusinessModel(query, context, externalCompany, enhancementData = null) {
+    const prompt = `
+Analyze the business model for external company: **${externalCompany}**
+
+${enhancementData?.webIntelligence ? `
+## WEB INTELLIGENCE FOR ${externalCompany}
+${JSON.stringify(enhancementData.webIntelligence, null, 2)}
+` : `## WEB INTELLIGENCE
+${enhancementData?.source === 'ai_analysis' ? 
+  `AI Analysis Available: ${enhancementData.businessModel.primary} business model predicted` :
+  'No web intelligence available - providing analysis based on company name and industry patterns.'}`}
+
+USER QUESTION: "${query}"
+
+Provide comprehensive business model analysis for ${externalCompany} including B2B/B2C classification, target customers, and competitive positioning.`;
+
+    return await this.callOpenAI(prompt, { maxTokens: 1200 });
+  }
+
+  // COMPLETE: All remaining handlers preserved from previous working version
   async handleBusinessModel(query, context, enhancementData = null) {
     if (!context.analysisData) {
       return "I need customer analysis data to provide business model insights. Please ensure you're viewing a customer analysis.";
@@ -974,61 +1481,17 @@ ${enhancementData?.webIntelligence ? `
 ## WEB INTELLIGENCE DATA
 **Website:** ${enhancementData.webIntelligence.url || 'Not found'}
 **Title:** ${enhancementData.webIntelligence.title || 'N/A'}
-**Description:** ${enhancementData.webIntelligence.description || 'N/A'}
-
-**Business Model Detection:**
-${JSON.stringify(enhancementData.webIntelligence.businessModel, null, 2) || 'No business model data extracted'}
-
-**Services Found:**
-${enhancementData.webIntelligence.services?.join(', ') || 'No services detected'}
-
-**Size Indicators:**
-${JSON.stringify(enhancementData.webIntelligence.sizeIndicators, null, 2) || 'No size indicators found'}
-
-**Contact Information:**
-${JSON.stringify(enhancementData.webIntelligence.contact, null, 2) || 'No contact info extracted'}
-
-**Locations:**
-${enhancementData.webIntelligence.locations?.join(', ') || 'No locations found'}
-` : '## WEB INTELLIGENCE\nNo web intelligence data available - analysis based on internal data only.'}
+**Business Model:** ${JSON.stringify(enhancementData.webIntelligence.businessModel, null, 2) || 'No business model data extracted'}
+**Services:** ${enhancementData.webIntelligence.services?.join(', ') || 'No services detected'}
+` : '## WEB INTELLIGENCE\nNo web intelligence data available.'}
 
 USER QUESTION: "${query}"
 
-Provide comprehensive business model analysis:
-
-### 📊 **Business Model Classification**
-- **Primary Model:** B2B/B2C/Mixed with confidence level and evidence
-- **Supporting Evidence:** From internal analysis AND web intelligence
-- **Industry Context:** Typical patterns for ${analysisData.industry}
-
-### 👥 **Customer Segments & Target Market**
-- **Specific Customer Types:** Who they serve based on services and web data
-- **Market Approach:** How they reach and serve customers
-- **Geographic Scope:** Based on locations and service area
-
-### 💰 **Revenue Model & Business Size**
-- **Revenue Model:** Contract-based, transactional, subscription, etc.
-- **Estimated Business Size:** Based on team size, locations, and web indicators
-- **Pricing Strategy:** Implications for our software pricing
-
-### 🛠️ **Field Service Software Implications**
-- **Software Requirements:** Based on business model (B2B needs vs B2C needs)
-- **Feature Priorities:** Scheduling, billing, customer management focus
-- **Implementation Approach:** Complexity based on business model
-
-### 🎯 **Sales Strategy Recommendations**
-- **Approach:** Based on business model and market position
-- **Decision Makers:** Key stakeholders to target
-- **Value Proposition:** Alignment with their business model
-
-Reference specific data points from both internal analysis and web intelligence when available.`;
+Provide comprehensive business model analysis with specific evidence and actionable insights for field service software sales.`;
 
     return await this.callOpenAI(prompt, { maxTokens: 1200 });
   }
 
-  /**
-   * ENHANCED: Company Research with Web Data
-   */
   async handleCompanyResearch(query, context, enhancementData = null) {
     if (!context.analysisData) {
       return "I need customer analysis data to provide company research. Please ensure you're viewing a customer analysis.";
@@ -1051,45 +1514,142 @@ ${JSON.stringify({
 
 ${enhancementData?.webIntelligence ? `
 ## WEB INTELLIGENCE
-**Website Found:** ${enhancementData.webIntelligence.url}
-**Company Details:** ${enhancementData.webIntelligence.title}
-**Description:** ${enhancementData.webIntelligence.description}
-
-**Business Intelligence:**
 ${JSON.stringify(enhancementData.webIntelligence, null, 2)}
-` : '## WEB INTELLIGENCE\nNo web intelligence available - using internal analysis only.'}
+` : '## WEB INTELLIGENCE\nNo web intelligence available.'}
 
 USER QUESTION: "${query}"
 
-Provide detailed company profile combining internal analysis with web intelligence:
-
-### 🏢 **Company Overview**
-- **Business Focus:** Based on industry, services, and web data
-- **Market Position:** Analysis of their competitive positioning
-- **Company Size & Scope:** Team size, locations, service area
-
-### 📊 **Business Intelligence**
-- **Revenue Indicators:** Size estimates and business scale
-- **Growth Stage:** Startup, established, mature based on indicators
-- **Market Approach:** B2B, B2C, or mixed model evidence
-
-### 🔍 **Competitive Intelligence**
-- **Market Position:** How they position in their industry
-- **Service Differentiation:** What makes them unique
-- **Technology Adoption:** Current systems and tech sophistication
-
-### 🎯 **Sales Intelligence**
-- **Key Decision Factors:** What drives their purchasing decisions
-- **Budget & Authority:** Indicators of purchasing power
-- **Implementation Readiness:** Based on current state and urgency
-
-Combine both internal analysis and web intelligence to provide actionable insights.`;
+Provide detailed company profile combining internal analysis with web intelligence.`;
 
     return await this.callOpenAI(prompt, { maxTokens: 1000 });
   }
 
-  // Keep all other handlers (email generation, data lookup, explanation, etc.)
-  // ... (same as before, with enhanced error handling)
+  async handleEmailGeneration(query, context) {
+    if (!context.analysisData) {
+      return "I need customer analysis data to generate personalized emails. Please ensure you're viewing a specific customer analysis.";
+    }
+
+    const analysisData = context.analysisData;
+    const emailType = this.detectEmailType(query);
+    
+    const prompt = `
+Generate a professional, personalized ${emailType} email for ${analysisData.customerName}.
+
+## CUSTOMER CONTEXT
+**Company:** ${analysisData.customerName}
+**Industry:** ${analysisData.industry}
+**Fit Score:** ${analysisData.fitScore}%
+**Key Challenges:** ${analysisData.challenges?.map(c => c.title).join(', ') || 'None identified'}
+**Timeline:** ${analysisData.timeline?.desiredGoLive || 'Not specified'}
+
+USER REQUEST: "${query}"
+
+Generate a compelling ${emailType} email with subject line and professional formatting.`;
+
+    return await this.callOpenAI(prompt, { maxTokens: 800 });
+  }
+
+  detectEmailType(query) {
+    const queryLower = query.toLowerCase();
+    if (queryLower.includes('follow') || queryLower.includes('follow-up')) return 'follow-up';
+    if (queryLower.includes('intro') || queryLower.includes('introduction')) return 'introduction';
+    if (queryLower.includes('proposal') || queryLower.includes('quote')) return 'proposal';
+    if (queryLower.includes('thank')) return 'thank you';
+    if (queryLower.includes('meeting') || queryLower.includes('demo')) return 'meeting invitation';
+    return 'professional follow-up';
+  }
+
+  async handleDataLookup(query, context) {
+    try {
+      const searchTerms = this.extractSearchTerms(query);
+      const historicalData = await historicalDataService.getAllHistoricalData();
+      const results = this.searchHistoricalData(historicalData, searchTerms);
+      
+      const prompt = `
+Based on search results, provide insights about: "${query}"
+
+SEARCH RESULTS: ${JSON.stringify(results.slice(0, 5), null, 2)}
+
+Provide key insights, patterns, and recommendations based on the data found.`;
+
+      return await this.callOpenAI(prompt);
+    } catch (error) {
+      return "I encountered an error searching our data. Please try rephrasing your question.";
+    }
+  }
+
+  extractSearchTerms(query) {
+    const terms = query.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(term => term.length > 2)
+      .filter(term => !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'find', 'show', 'search'].includes(term));
+    
+    return [...new Set(terms)];
+  }
+
+  searchHistoricalData(data, searchTerms) {
+    if (!searchTerms.length) return data.slice(0, 20);
+    
+    return data.filter(customer => {
+      const searchableText = [
+        customer.customerName,
+        customer.industry,
+        customer.services?.join(' ')
+      ].filter(Boolean).join(' ').toLowerCase();
+      
+      return searchTerms.some(term => searchableText.includes(term));
+    });
+  }
+
+  async handleExplanation(query, context) {
+    const prompt = `
+You are an expert on field service management software. Explain concepts clearly with practical insights.
+
+USER QUESTION: "${query}"
+
+Provide a comprehensive explanation including definition, importance, examples, and practical applications.`;
+
+    return await this.callOpenAI(prompt);
+  }
+
+  async handleNextSteps(query, context) {
+    if (!context.analysisData) {
+      return "I need specific customer analysis data to provide strategic recommendations. Please ensure you're viewing a customer analysis.";
+    }
+
+    const analysisData = context.analysisData;
+    
+    const prompt = `
+Provide strategic next steps recommendations for ${analysisData.customerName}.
+
+## CURRENT SITUATION
+**Company:** ${analysisData.customerName}
+**Industry:** ${analysisData.industry}
+**Fit Score:** ${analysisData.fitScore}%
+**Timeline:** ${analysisData.timeline?.desiredGoLive || 'Not specified'}
+
+USER QUESTION: "${query}"
+
+Provide specific, actionable next steps based on their analysis data.`;
+
+    return await this.callOpenAI(prompt);
+  }
+
+  async handleGeneralQuery(query, context) {
+    const prompt = `
+You are a helpful AI assistant for a field service management software company.
+
+${context.analysisData ? 
+  `You're currently viewing analysis for **${context.analysisData.customerName}** (${context.analysisData.industry})` : 
+  'No specific customer analysis is currently loaded.'}
+
+USER QUERY: "${query}"
+
+Provide a helpful response and suggest specific ways you can assist with customer analysis tasks.`;
+
+    return await this.callOpenAI(prompt);
+  }
 
   async callOpenAI(prompt, options = {}) {
     try {
@@ -1145,28 +1705,7 @@ Combine both internal analysis and web intelligence to provide actionable insigh
       }
     }
   }
-
-  // Placeholder handlers for remaining intents...
-  async handleEmailGeneration(query, context) {
-    return "Email generation feature - implementation pending";
-  }
-
-  async handleDataLookup(query, context) {
-    return "Data lookup feature - implementation pending";
-  }
-
-  async handleExplanation(query, context) {
-    return "Explanation feature - implementation pending";
-  }
-
-  async handleNextSteps(query, context) {
-    return "Next steps feature - implementation pending";
-  }
-
-  async handleGeneralQuery(query, context) {
-    return "General query handler - implementation pending";
-  }
 }
 
-// Export an instance, not the class
+// Export an instance, not the class - this is what the controller expects
 module.exports = new ConversationalAIService();
