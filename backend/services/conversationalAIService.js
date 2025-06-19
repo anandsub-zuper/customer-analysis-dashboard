@@ -1083,4 +1083,4 @@ Format your response clearly with relevant suggestions for how to leverage the c
   }
 }
 
-module.exports = ConversationalAIService;
+module.exports = new ConversationalAIService();
