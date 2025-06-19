@@ -1349,12 +1349,14 @@ Use ALL the actual customer data, names, numbers, and details from the similar c
 Provide comprehensive company research for: **${externalCompany}**
 
 ${enhancementData?.webIntelligence ? `
-## WEB INTELLIGENCE ${enhancementData.webIntelligence.aiEnhanced ? '(AI-ENHANCED)' : '(BASIC)'}
+## WEB INTELLIGENCE ${enhancementData.webIntelligence.aiEnhanced ? '(AI-ENHANCED)' : enhancementData.webIntelligence.source === 'ai_analysis' ? '(AI-ANALYSIS)' : '(BASIC)'}
 
+${enhancementData.webIntelligence.url ? `
 ### 🌐 Website Information
-**Website:** ${enhancementData.webIntelligence.url || 'Not found'}
+**Website:** ${enhancementData.webIntelligence.url}
 **Title:** ${enhancementData.webIntelligence.title || 'N/A'}
 **Description:** ${enhancementData.webIntelligence.description || 'N/A'}
+` : ''}
 
 ${enhancementData.webIntelligence.aiEnhanced ? `
 ### 🤖 AI-Enhanced Business Intelligence
@@ -1368,6 +1370,16 @@ ${enhancementData.webIntelligence.aiEnhanced ? `
 **Primary Services:** ${enhancementData.webIntelligence.enhancement.serviceAnalysis.primaryServices.join(', ')}
 **Service Model:** ${enhancementData.webIntelligence.enhancement.serviceAnalysis.serviceModel}
 **Key Insights:** ${enhancementData.webIntelligence.enhancement.keyInsights.join(' | ')}
+` : enhancementData.webIntelligence.source === 'ai_analysis' ? `
+### 🤖 AI-Powered Analysis (No Website Found)
+**Business Model Prediction:** ${enhancementData.webIntelligence.businessModel.primary} (${Math.round(enhancementData.webIntelligence.businessModel.confidence * 100)}% confidence)
+**Reasoning:** ${enhancementData.webIntelligence.businessModel.reasoning}
+**Predicted Services:** ${enhancementData.webIntelligence.industryAnalysis.typicalServices.join(', ')}
+**Company Size Estimate:** ${enhancementData.webIntelligence.sizeEstimate.range}
+
+### 🔍 Research Recommendations
+**Alternative Search Terms:** ${enhancementData.webIntelligence.searchRecommendations.alternativeSearchTerms.join(', ')}
+**Platforms to Check:** ${enhancementData.webIntelligence.searchRecommendations.platformsToCheck.join(', ')}
 ` : `
 ### 📊 Basic Web Intelligence
 **Business Model:** ${enhancementData.webIntelligence.businessModel?.primary || 'Unknown'} 
@@ -1375,17 +1387,7 @@ ${enhancementData.webIntelligence.aiEnhanced ? `
 **Contact:** ${enhancementData.webIntelligence.contact?.phones?.join(', ') || 'Not found'}
 `}
 ` : `## WEB INTELLIGENCE
-${enhancementData?.source === 'ai_analysis' ? `
-### 🤖 AI-Powered Analysis (No Website Found)
-**Business Model Prediction:** ${enhancementData.businessModel.primary} (${Math.round(enhancementData.businessModel.confidence * 100)}% confidence)
-**Reasoning:** ${enhancementData.businessModel.reasoning}
-**Predicted Services:** ${enhancementData.industryAnalysis.typicalServices.join(', ')}
-**Company Size Estimate:** ${enhancementData.sizeEstimate.range}
-
-### 🔍 Research Recommendations
-**Alternative Search Terms:** ${enhancementData.searchRecommendations.alternativeSearchTerms.join(', ')}
-**Platforms to Check:** ${enhancementData.searchRecommendations.platformsToCheck.join(', ')}
-` : 'No web intelligence available - no website found and AI analysis not available.'}`}
+No web intelligence available - no website found and AI analysis not available.`}
 
 USER QUESTION: "${query}"
 
@@ -1395,8 +1397,12 @@ USER QUESTION: "${query}"
 ${enhancementData?.webIntelligence?.url ? 
   `✅ **Website Found:** ${enhancementData.webIntelligence.url}
    📄 **Company Description:** ${enhancementData.webIntelligence.description}` :
+  enhancementData?.webIntelligence?.source === 'ai_analysis' ?
   `❌ **Website:** No website found through AI-powered domain search
-   💡 **Next Steps:** ${enhancementData?.searchRecommendations?.additionalResearch?.join(', ') || 'Try manual search or industry directories'}`}
+   🤖 **AI Analysis:** Comprehensive business intelligence generated from company name and industry patterns
+   💡 **Alternative Research:** ${enhancementData.webIntelligence.searchRecommendations?.additionalResearch?.join(', ') || 'Try LinkedIn, Google My Business, or industry directories'}` :
+  `❌ **Website:** No website found through automated search
+   💡 **Next Steps:** Try manual search or industry directories`}
 
 ### 🏢 **Business Intelligence**
 ${enhancementData?.webIntelligence?.aiEnhanced ? 
@@ -1405,31 +1411,58 @@ ${enhancementData?.webIntelligence?.aiEnhanced ?
    - **Confidence:** ${Math.round(enhancementData.webIntelligence.enhancement.enhancedBusinessModel.confidence * 100)}%
    - **Evidence:** ${enhancementData.webIntelligence.enhancement.enhancedBusinessModel.evidence.join(', ')}
    - **Company Size:** ${enhancementData.webIntelligence.enhancement.companySizeEstimate.range}` :
-  enhancementData?.businessModel ? 
-  `🎯 **AI Prediction:**
-   - **Business Model:** ${enhancementData.businessModel.primary} (${Math.round(enhancementData.businessModel.confidence * 100)}% confidence)
-   - **Reasoning:** ${enhancementData.businessModel.reasoning}` :
+  enhancementData?.webIntelligence?.source === 'ai_analysis' ? 
+  `🎯 **AI Business Model Prediction:**
+   - **Business Model:** ${enhancementData.webIntelligence.businessModel.primary} (${Math.round(enhancementData.webIntelligence.businessModel.confidence * 100)}% confidence)
+   - **Reasoning:** ${enhancementData.webIntelligence.businessModel.reasoning}
+   - **Predicted Size:** ${enhancementData.webIntelligence.sizeEstimate.range}
+   - **Size Reasoning:** ${enhancementData.webIntelligence.sizeEstimate.reasoning}` :
   '❓ **Business Model:** Unable to determine from available data'}
 
 ### 🎯 **Field Service Software Implications**
-${enhancementData?.fieldServicePredictions ? 
-  `📋 **Software Needs:** ${enhancementData.fieldServicePredictions.softwareNeeds.join(', ')}
-   ⚙️ **Implementation Complexity:** ${enhancementData.fieldServicePredictions.implementationComplexity}
-   ⚠️ **Typical Challenges:** ${enhancementData.fieldServicePredictions.typicalChallenges.join(', ')}` :
+${enhancementData?.webIntelligence?.fieldServicePredictions ? 
+  `📋 **Software Needs:** ${enhancementData.webIntelligence.fieldServicePredictions.softwareNeeds.join(', ')}
+   ⚙️ **Implementation Complexity:** ${enhancementData.webIntelligence.fieldServicePredictions.implementationComplexity}
+   ⚠️ **Typical Challenges:** ${enhancementData.webIntelligence.fieldServicePredictions.typicalChallenges.join(', ')}` :
+  enhancementData?.webIntelligence?.source === 'ai_analysis' ?
+  `🎯 **AI Predictions for ${externalCompany}:**
+   - **Likely Software Needs:** Work order management, scheduling, customer communication
+   - **Implementation Approach:** Standard HVAC field service setup
+   - **Typical Challenges:** Integration with existing systems, technician adoption` :
   'Field service requirements analysis not available'}
 
 ### 💡 **Strategic Insights**
 ${enhancementData?.webIntelligence?.aiEnhanced ? 
   `🚀 **Key Insights:** ${enhancementData.webIntelligence.enhancement.keyInsights.join(' | ')}
    🏆 **Competitive Factors:** ${enhancementData.webIntelligence.enhancement.marketIntelligence.competitiveFactors.join(', ')}` :
+  enhancementData?.webIntelligence?.source === 'ai_analysis' ?
+  `🎯 **AI-Generated Insights:**
+   - **Market Characteristics:** ${enhancementData.webIntelligence.industryAnalysis.marketCharacteristics.join(', ')}
+   - **Typical Customer Types:** ${enhancementData.webIntelligence.industryAnalysis.customerTypes.join(', ')}
+   - **Industry Positioning:** Local HVAC service provider with residential focus` :
   'Strategic analysis requires additional research'}
 
 ### 🔍 **Research Quality**
 ${enhancementData?.webIntelligence?.aiEnhanced ? 
   '🌟 **High-Quality:** AI-enhanced web intelligence with comprehensive business analysis' :
-  enhancementData?.source === 'ai_analysis' ? 
-  '🎯 **AI-Predicted:** Intelligent analysis based on company name and industry patterns' :
-  '⚠️ **Limited:** Basic analysis only - manual research recommended'}`;
+  enhancementData?.webIntelligence?.source === 'ai_analysis' ? 
+  `🎯 **AI-Predicted:** Intelligent analysis based on company name and industry patterns (${enhancementData.webIntelligence.confidence} confidence)` :
+  '⚠️ **Limited:** Basic analysis only - manual research recommended'}
+
+### 📋 **Next Steps for Sales Team**
+${enhancementData?.webIntelligence?.source === 'ai_analysis' ?
+  `1. **Direct Outreach:** Try calling or visiting their location
+   2. **LinkedIn Research:** Search for "${externalCompany}" on LinkedIn  
+   3. **Industry Directories:** Check HVAC trade associations
+   4. **Local Search:** Try Google My Business or local directories
+   5. **Alternative Names:** Search for "${enhancementData.webIntelligence.searchRecommendations?.alternativeSearchTerms?.join('", "') || 'variations of the company name'}"` :
+  enhancementData?.webIntelligence?.url ?
+  `1. **Visit Website:** ${enhancementData.webIntelligence.url}
+   2. **Contact Directly:** Use extracted contact information
+   3. **Competitive Analysis:** Analyze their positioning and services` :
+  `1. **Manual Search:** Try Google, LinkedIn, industry directories
+   2. **Verify Company Name:** Ensure complete and accurate spelling
+   3. **Local Resources:** Check local business listings`}`;
 
     return await this.callOpenAI(prompt, { maxTokens: 1200 });
   }
