@@ -91,23 +91,42 @@ You are an expert at predicting company website domains. Generate the most likel
 
 ## DOMAIN GENERATION RULES
 1. **Most Likely First:** Order domains by probability of being correct
-2. **Industry Patterns:** Consider industry-specific domain patterns (HVAC companies often use "hvac", "heating", "cooling")
-3. **Geographic Considerations:** Include location-based variations if relevant
-4. **Brand Variations:** Consider how companies typically shorten their names
-5. **Extension Priorities:** .com first, then .net, .org if appropriate
+2. **Industry Patterns:** Consider industry-specific domain patterns
+3. **Common Abbreviations:** Include industry abbreviations (HVAC → "ac", "heat", "cool")
+4. **Geographic Considerations:** Include location-based variations if relevant
+5. **Brand Variations:** Consider how companies typically shorten their names
+6. **Extension Priorities:** .com first, then .net, .org if appropriate
+
+## CRITICAL INDUSTRY ABBREVIATIONS
+**HVAC Industry:**
+- "ac" (air conditioning) - VERY COMMON: "mrchillac.com", "smithac.com"
+- "heat" - heating focus: "johnsonheat.com"
+- "cool" - cooling focus: "abccool.com"
+- "hvac" - full term: "companyhvac.com"
+
+**Plumbing Industry:**
+- "plumb" - shortened: "smithplumb.com"
+- "drain" - specialty: "companydrain.com"
+- "pipe" - focus: "abcpipe.com"
+
+**Electrical Industry:**
+- "electric" - full: "johnsonelectric.com"
+- "elec" - shortened: "abcelec.com"
+- "power" - focus: "smithpower.com"
 
 ## DOMAIN PATTERNS TO CONSIDER
 - Remove legal suffixes (Inc, LLC, Corp, Ltd)
 - Company abbreviations and acronyms
-- Industry-specific suffixes (services, solutions, group, hvac, plumbing, electrical)
+- Industry-specific suffixes (services, solutions, group, pro, plus)
 - Geographic modifiers if location is known
-- Common business prefixes/suffixes (call, pro, best, top)
+- Common business prefixes/suffixes (call, best, top, pro, plus)
 
-## EXAMPLES
-"Johnson Plumbing Services Inc" → ["johnsonplumbing.com", "johnson-plumbing.com", "jpsservices.com", "johnsonplumbingservices.com"]
-"Mr. Chill Heating & Air LLC" → ["mrchillhvac.com", "mr-chill.com", "mrchillheating.com", "chillhvac.com"]
+## EXAMPLES WITH ABBREVIATIONS
+"Mr. Chill Heating & Air LLC" → ["mrchillac.com", "mrchillhvac.com", "mr-chill.com", "mrchillheating.com", "chillac.com"]
+"Johnson Plumbing Services Inc" → ["johnsonplumb.com", "johnsonplumbing.com", "johnson-plumbing.com", "jpsservices.com"]
+"ABC Electrical Corp" → ["abcelectric.com", "abcelec.com", "abc-electric.com", "abcpower.com"]
 
-Generate 8-12 most likely domains for "${customerName}" in JSON format:
+Generate 8-12 most likely domains for "${customerName}" in JSON format, prioritizing common industry abbreviations:
 
 {
   "domains": [
@@ -141,7 +160,7 @@ Generate 8-12 most likely domains for "${customerName}" in JSON format:
   }
 
   /**
-   * ENHANCED: AI-Powered Data Enhancement
+   * ENHANCED: AI-Powered Data Enhancement with Robust JSON Parsing
    */
   async enhanceDataWithAI(rawBusinessData, customerName) {
     try {
@@ -159,17 +178,17 @@ ${JSON.stringify(rawBusinessData, null, 2)}
 5. **Target Customer Analysis:** Identify target customer segments
 6. **Technology Sophistication:** Assess tech adoption level from website quality
 
-## OUTPUT FORMAT
+## CRITICAL: RESPOND WITH VALID JSON ONLY
 {
   "enhancedBusinessModel": {
     "primary": "B2B|B2C|Mixed",
-    "confidence": 0.0-1.0,
+    "confidence": 0.8,
     "evidence": ["list of supporting evidence"],
     "targetCustomers": ["customer segment descriptions"]
   },
   "companySizeEstimate": {
     "range": "1-10|11-50|51-200|201-500|500+",
-    "confidence": 0.0-1.0,
+    "confidence": 0.7,
     "indicators": ["indicators used for estimation"]
   },
   "serviceAnalysis": {
@@ -185,10 +204,61 @@ ${JSON.stringify(rawBusinessData, null, 2)}
   "keyInsights": ["actionable insights for sales teams"]
 }
 
-Provide comprehensive business intelligence enhancement.`;
+RESPOND WITH VALID JSON ONLY - NO MARKDOWN, NO EXPLANATION, JUST JSON.`;
 
       const response = await this.callOpenAI(prompt, { maxTokens: 800 });
-      const enhancedData = JSON.parse(response);
+      
+      // Enhanced JSON parsing with fallback
+      let enhancedData;
+      try {
+        // Try to clean the response first
+        let cleanResponse = response.trim();
+        
+        // Remove markdown code blocks if present
+        if (cleanResponse.startsWith('```json')) {
+          cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (cleanResponse.startsWith('```')) {
+          cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+        
+        // Remove any leading/trailing non-JSON content
+        const jsonStart = cleanResponse.indexOf('{');
+        const jsonEnd = cleanResponse.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          cleanResponse = cleanResponse.substring(jsonStart, jsonEnd + 1);
+        }
+        
+        enhancedData = JSON.parse(cleanResponse);
+        
+      } catch (parseError) {
+        console.warn('JSON parsing failed, creating fallback enhancement:', parseError.message);
+        
+        // Create fallback enhancement based on raw data
+        enhancedData = {
+          enhancedBusinessModel: {
+            primary: rawBusinessData.businessModel?.primary || "Mixed",
+            confidence: rawBusinessData.businessModel?.confidence || 0.6,
+            evidence: rawBusinessData.businessModel?.indicators || ["Website content analysis"],
+            targetCustomers: ["Business customers", "Residential customers"]
+          },
+          companySizeEstimate: {
+            range: rawBusinessData.sizeIndicators?.length > 0 ? "11-50" : "1-10",
+            confidence: 0.5,
+            indicators: rawBusinessData.sizeIndicators?.map(i => i.type) || ["Website presence"]
+          },
+          serviceAnalysis: {
+            primaryServices: rawBusinessData.services || ["HVAC services"],
+            serviceModel: "Mixed",
+            specializationLevel: "Generalist"
+          },
+          marketIntelligence: {
+            marketPosition: "Local",
+            competitiveFactors: ["Local presence", "Service focus"],
+            technologyAdoption: "Medium"
+          },
+          keyInsights: ["Local service provider", "Mixed customer base", "Standard HVAC operations"]
+        };
+      }
       
       // Merge enhanced data with original
       return {
@@ -279,7 +349,7 @@ Provide intelligent business analysis even without direct website data.`;
   }
 
   /**
-   * FALLBACK: Pattern-based domain generation (preserved for reliability)
+   * ENHANCED: Pattern-based domain generation with industry abbreviations
    */
   generateDomainsPattern(customerName) {
     const cleanName = customerName
@@ -302,12 +372,28 @@ Provide intelligent business analysis even without direct website data.`;
     domains.push(`${primaryName}.com`);
     domains.push(`${hyphenName}.com`);
     
-    // Industry-specific variations
-    domains.push(`${primaryName}hvac.com`);
+    // ENHANCED: Industry-specific abbreviations
+    // HVAC abbreviations - MOST IMPORTANT
+    domains.push(`${primaryName}ac.com`);        // air conditioning
+    domains.push(`${primaryName}hvac.com`);      // full HVAC
+    domains.push(`${primaryName}heat.com`);      // heating
+    domains.push(`${primaryName}cool.com`);      // cooling
+    
+    // Plumbing abbreviations
+    domains.push(`${primaryName}plumb.com`);     // plumbing
+    domains.push(`${primaryName}drain.com`);     // drain services
+    
+    // Electrical abbreviations
+    domains.push(`${primaryName}electric.com`);  // electrical
+    domains.push(`${primaryName}elec.com`);      // electrical short
+    domains.push(`${primaryName}power.com`);     // power services
+    
+    // General service abbreviations
     domains.push(`${primaryName}services.com`);
-    domains.push(`${primaryName}plumbing.com`);
+    domains.push(`${primaryName}pro.com`);
+    domains.push(`${primaryName}plus.com`);
 
-    return [...new Set(domains)];
+    return [...new Set(domains)]; // Remove duplicates
   }
 
   async scrapeWebsite(url) {
